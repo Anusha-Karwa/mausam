@@ -27,7 +27,10 @@ def create_app():
                 return o.isoformat()
             return DefaultJSONProvider.default(o)
 
-    app = Flask(__name__, static_folder="static", template_folder="templates")
+    from pathlib import Path
+
+    static_dir = Path(__file__).resolve().parent.parent / "public" / "static"
+    app = Flask(__name__, static_folder=str(static_dir), static_url_path="/static", template_folder="templates")
     app.json_provider_class = JSONProvider
     app.json = JSONProvider(app)
     app.config["JSON_SORT_KEYS"] = False

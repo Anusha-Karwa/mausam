@@ -8,8 +8,8 @@ The component map is a swimlane diagram: columns are Trigger → Input → Conte
 
 | Layer | What | Where |
 |---|---|---|
-| Web app | Server-rendered Jinja2 pages, hand-written CSS, vanilla JS, Chart.js 4.4.1, Lucide icons | `app/templates`, `app/static` |
-| System | Flask app as one Vercel Python function (`api/index.py`); all routes rewritten to it | `app/__init__.py`, `app/routes/*` |
+| Web app | Server-rendered Jinja2 pages, hand-written CSS, vanilla JS, Chart.js 4.4.1, Lucide icons | `app/templates`, `public/static` (served by the CDN) |
+| System | Flask app as one Vercel Python function (zero-config entrypoint `index.py`) | `app/__init__.py`, `app/routes/*` |
 | Services | Pure-Python maths and API clients (no pandas on Vercel) | `app/services/*` |
 | Jobs | Daily NAV + Saturday report, logged in `job_runs` | `app/jobs.py`, `app/routes/cron.py` |
 | ML | Hybrid ARIMA + Ridge, backtests, category averages — GitHub Actions only | `ml/*`, `.github/workflows/ml_forecast.yml` |

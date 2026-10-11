@@ -25,7 +25,7 @@ Meera is 28 and has five monthly SIPs: a large-cap index fund, a mid-cap fund, a
 | Part | Choice |
 |---|---|
 | Web | Flask + Jinja2 templates, hand-written CSS, vanilla JS, Chart.js, Lucide |
-| Hosting | Vercel (one Python function, `api/index.py`) + Vercel Cron |
+| Hosting | Vercel (one Python function, `index.py`) + Vercel Cron |
 | Database | Neon serverless PostgreSQL (pooled connection) |
 | AI | Gemini Flash only (`GEMINI_MODEL`, default `gemini-3.8-flash`) |
 | ML | Python in GitHub Actions (pandas, statsmodels, scikit-learn) |
@@ -96,7 +96,7 @@ GitHub → Actions → **ML forecasts (Friday night)** → Run workflow.
 
 ```bash
 pip install -r requirements.txt
-flask --app api/index.py run
+flask --app index run
 ```
 
 ## How the jobs work
