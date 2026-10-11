@@ -4,7 +4,7 @@
 
 Meera is 28 and has five monthly SIPs: a large-cap index fund, a mid-cap fund, a small-cap fund, a short-duration debt fund and an international fund of funds. Her fund app shows only NAVs and absolute returns, so once a month she screenshots them to a CA friend asking "is this okay?". Mausam answers that question for her, every week, without jargon.
 
-- **Live app:** LIVE_URL (Vercel)
+- **Live app:** https://mausam-alpha-azure.vercel.app
 - **Component map:** [docs/Mausam_Components_Map.png](docs/Mausam_Components_Map.png)
 
 > Mausam is an educational tool, not investment advice. Mutual fund investments are subject to market risks.
