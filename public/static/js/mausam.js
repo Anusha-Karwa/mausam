@@ -285,7 +285,7 @@
     function newDrop(anywhere) {
       const z = Math.random();   // depth: far drops are thinner, slower and fainter
       return { x: Math.random() * (w + 200), y: anywhere ? Math.random() * h : -20 - Math.random() * 100,
-               len: 10 + z * 18, speed: 9 + z * 13, width: 0.6 + z * 1.1, alpha: 0.25 + z * 0.45 };
+               len: 12 + z * 20, speed: 10 + z * 14, width: 0.7 + z * 1.1, alpha: 0.18 + z * 0.37 };
     }
     function resize() {
       w = window.innerWidth; h = window.innerHeight;
@@ -296,7 +296,8 @@
     }
     function colour(alpha) {
       const night = document.documentElement.getAttribute('data-mode') === 'night';
-      return night ? `rgba(170, 190, 225, ${alpha * 0.8})` : `rgba(235, 242, 252, ${alpha})`;
+      // light streaks at night; cool blue-grey streaks by day so they show against light panels
+      return night ? `rgba(185, 205, 240, ${alpha})` : `rgba(92, 120, 160, ${alpha})`;
     }
     function draw(step) {
       ctx.clearRect(0, 0, w, h);

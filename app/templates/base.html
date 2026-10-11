@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=4">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=2">
   {% block head %}{% endblock %}
 </head>
 <body class="sky-{{ (sky or {}).key or 'clear' }}">
@@ -100,7 +100,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
-<script src="{{ url_for('static', filename='js/mausam.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/mausam.js') }}?v=3"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

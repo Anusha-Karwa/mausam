@@ -75,10 +75,11 @@ body.sky-storm .cloud-4 { width: 500px; height: 225px; top: -6vh; animation-dura
 body.sky-storm .cloud-6 { width: 640px; height: 288px; top: 11vh; animation-duration: 65s; }
 body.sky-storm .cloud-1, body.sky-storm .cloud-3, body.sky-storm .cloud-5 { animation-duration: 90s; }
 
-/* ---- rain + lightning (storm only) ---- */
+/* ---- rain + lightning (storm only), drawn in front of the app ---- */
+.sky-front { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
 .rain { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
 body.sky-storm .rain { display: block; }
-.lightning { position: absolute; inset: 0; background: rgba(235, 240, 255, .9); opacity: 0; }
+.lightning { position: absolute; inset: 0; background: rgba(235, 240, 255, .55); opacity: 0; mix-blend-mode: screen; }
 body.sky-storm .lightning { animation: sky-lightning 11s linear infinite; }
 @keyframes sky-lightning {
   0%, 61%, 62.6%, 63.4%, 100% { opacity: 0; }
@@ -130,4 +131,4 @@ html[data-mode="night"] .day-only, html[data-mode="day"] .night-only { display: 
   .cloud-6 { transform: translateX(65vw); }
   body.sky-storm .lightning { animation: none; }
 }
-@media print { .sky-scene { display: none; } }
+@media print { .sky-scene, .sky-front { display: none; } }

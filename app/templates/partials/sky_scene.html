@@ -40,6 +40,9 @@
     {% for c in range(7) %}<svg class="cloud cloud-{{ c }}"><use href="#cloud-shape"/></svg>{% endfor %}
   </div>
 
+</div>
+{# Rain and lightning sit in FRONT of the app (clicks pass through), so it rains over the whole screen. #}
+<div class="sky-front" aria-hidden="true">
   <canvas class="rain" id="rain-canvas"></canvas>
   <div class="lightning"></div>
 </div>
