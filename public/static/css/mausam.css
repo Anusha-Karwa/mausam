@@ -152,7 +152,7 @@ small, .small { font-size: 13px; }
 .stack { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
 /* grid and flex children may shrink below their content (wide tables/charts scroll inside instead) */
 .stack > *, .grid > *, .page-head > *, .panel-head > * { min-width: 0; }
-.content { min-width: 0; overflow-wrap: anywhere; }
+.content { min-width: 0; overflow-wrap: break-word; }
 canvas { max-width: 100%; }
 .grid { display: grid; gap: 20px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; }
