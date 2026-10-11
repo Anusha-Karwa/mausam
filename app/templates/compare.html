@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Compare funds{% endblock %}
+
+{% block head %}
+<style>
+  .pick-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+  @media (max-width: 900px) { .pick-grid { grid-template-columns: 1fr; } }
+  .fund-checks { display: grid; gap: 6px; }
+  .fund-checks .check { padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); margin: 0; cursor: pointer; }
+  .fund-checks .check:has(input:checked) { border-color: var(--monsoon); background: var(--monsoon-soft); }
+  .fund-checks .check:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+  .search-box { position: relative; }
+  .search-box svg.lead { position: absolute; left: 12px; top: 11px; width: 18px; height: 18px; color: var(--slate); pointer-events: none; }
+  .search-box input { padding-left: 38px; }
+  .results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; max-height: 260px; overflow-y: auto; }
+  .results li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 14px; }
+  .results li span { min-width: 0; overflow-wrap: anywhere; }
+  .extras { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .extras .chip button { border: 0; background: none; padding: 0; margin-left: 2px; color: inherit; cursor: pointer; display: inline-grid; place-items: center; }
+  .extras .chip button svg { width: 14px; height: 14px; }
+  .pick-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .cmp-table th[scope="row"] { color: var(--ink); font-weight: 500; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  .cmp-table thead th { vertical-align: bottom; white-space: normal; min-width: 120px; }
+  .cmp-table thead th .row { gap: 6px; flex-wrap: nowrap; align-items: flex-start; }
+  .cmp-table td { text-align: right; font-variant-numeric: tabular-nums; }
+  .cmp-table td.text { text-align: right; white-space: normal; font-size: 13px; color: var(--slate); }
+  .corr td, .corr th { text-align: center; padding: 8px 6px; }
+  .corr td { font-variant-numeric: tabular-nums; font-weight: 600; border-radius: 6px; border: 2px solid var(--surface); }
+  .corr th { max-width: 110px; white-space: normal; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <div class="page-head">
+    <div>
+      <h1>Compare funds</h1>
+      <p>Put 2 to 5 funds side by side: how much they grew, how bumpy the ride was, and how alike they move.</p>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="pick-h">
+    <div class="panel-head"><h2 id="pick-h">Pick funds to compare</h2><span class="small muted" id="pick-count" aria-live="polite"></span></div>
+    <div class="pick-grid">
+      <div>
+        <p class="small muted" style="margin-bottom:8px">Your funds</p>
+        {% if funds %}
+        <div class="fund-checks" id="own-funds">
+          {% for f in funds %}
+          <label class="check">
+            <input type="checkbox" value="{{ f.scheme_code }}" data-name="{{ f.short_name or f.scheme_name }}">
+            <span class="swatch" style="background:{{ f.colour or 'var(--monsoon)' }}" aria-hidden="true"></span>
+            <span>{{ f.short_name or f.scheme_name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+          <p class="muted">You haven't added any funds yet. You can still search for any fund on the right. <a href="/manage">Add your funds</a></p>
+        {% endif %}
+      </div>
+      <div>
+        <label for="cmp-search">Add any other fund</label>
+        <div class="search-box">
+          <i data-lucide="search" class="lead" aria-hidden="true"></i>
+          <input type="search" id="cmp-search" placeholder="Type a fund name or scheme code" autocomplete="off" aria-describedby="cmp-search-hint" aria-controls="cmp-results-list">
+        </div>
+        <p class="hint" id="cmp-search-hint">Type at least 3 letters. Direct growth plans are listed first.</p>
+        <ul class="results" id="cmp-results-list" aria-live="polite"></ul>
+        <div class="extras" id="extras" aria-label="Other funds you added"></div>
+      </div>
+    </div>
+    <div class="pick-foot">
+      <div class="row">
+        <span class="small muted" id="period-label">Starting from</span>
+        <div class="segmented" role="group" aria-labelledby="period-label" id="period">
+          {% for p, label in [('6M', '6 months ago'), ('1Y', '1 year ago'), ('3Y', '3 years ago'), ('5Y', '5 years ago'), ('MAX', 'Earliest')] %}
+          <button type="button" data-period="{{ p }}" aria-pressed="false">{{ label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <span class="small muted">If a fund is younger, all lines start from its first day so the race is fair.</span>
+    </div>
+  </section>
+
+  <div id="cmp-out" aria-live="polite">
+    <div class="panel">{{ m.skeleton(4, 18) }}</div>
+  </div>
+</div>
+
+{% set own = [] %}
+{% for f in funds %}{% set _ = own.append({'code': f.scheme_code, 'name': f.short_name or f.scheme_name, 'colour': f.colour, 'category': f.scheme_category, 'benchmark': (f.benchmark_key|bench) if f.benchmark_key and f.benchmark_key != 'CATEGORY_ONLY' else 'Category average'}) %}{% endfor %}
+{{ m.json_data('cmp-own', own) }}
+{{ m.json_data('cmp-pre', preselect or '') }}
+{{ m.json_data('cmp-terms', {
+  'vol': term('volatility', 'Volatility')|string,
+  'dd': term('drawdown', 'Biggest fall')|string,
+  'ytd': term('ytd', 'Year to date')|string,
+  'cagr': term('cagr', '3 years (yearly)')|string,
+  'bench': term('benchmark', 'Benchmark')|string,
+}) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const own = Mausam.data('cmp-own') || [];
+  const T = Mausam.data('cmp-terms') || {};
+  const esc = Mausam.esc;
+  const ownByCode = {};
+  own.forEach((f) => { ownByCode[f.code] = f; });
+  const names = {};
+  own.forEach((f) => { names[f.code] = f.name; });
+
+  const params = new URLSearchParams(location.search);
+  let selected = String(Mausam.data('cmp-pre') || '').split(',').map((s) => parseInt(s, 10)).filter((n) => !isNaN(n)).slice(0, 5);
+  selected = selected.filter((c, i) => selected.indexOf(c) === i);
+  let extras = selected.filter((c) => !ownByCode[c]);
+  let period = (params.get('period') || '3Y').toUpperCase();
+  if (!['6M', '1Y', '3Y', '5Y', 'MAX'].includes(period)) period = '3Y';
+
+  const out = document.getElementById('cmp-out');
+  const countEl = document.getElementById('pick-count');
+  const checks = Array.from(document.querySelectorAll('#own-funds input[type=checkbox]'));
+  let lastData = null;
+  let reqId = 0;
+  let timer = null;
+
+  // ---------- selection UI ----------
+  function syncPicker() {
+    checks.forEach((cb) => {
+      const c = parseInt(cb.value, 10);
+      cb.checked = selected.includes(c);
+      cb.disabled = !cb.checked && selected.length >= 5;
+    });
+    const ex = document.getElementById('extras');
+    ex.innerHTML = extras.map((c) => `<span class="chip teal">${esc(names[c] || 'Scheme ' + c)}<button type="button" data-remove="${c}" aria-label="Remove ${esc(names[c] || 'scheme ' + c)} from the comparison"><i data-lucide="x" aria-hidden="true"></i></button></span>`).join('');
+    Mausam.icons();
+    const n = selected.length;
+    countEl.textContent = n < 2 ? `${n} picked · pick at least 2` : (n >= 5 ? '5 picked · that is the most at once' : `${n} picked`);
+    document.querySelectorAll('#period button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.period === period ? 'true' : 'false'));
+  }
+
+  function changed() {
+    syncPicker();
+    try {
+      const q = new URLSearchParams({ codes: selected.join(','), period });
+      history.replaceState(null, '', `${location.pathname}?${q.toString()}`);
+    } catch (e) { /* ignore */ }
+    clearTimeout(timer);
+    timer = setTimeout(load, 250);
+  }
+
+  checks.forEach((cb) => cb.addEventListener('change', () => {
+    const c = parseInt(cb.value, 10);
+    if (cb.checked) { if (selected.length < 5 && !selected.includes(c)) selected.push(c); }
+    else selected = selected.filter((x) => x !== c);
+    changed();
+  }));
+  document.getElementById('extras').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-remove]');
+    if (!b) return;
+    const c = parseInt(b.dataset.remove, 10);
+    selected = selected.filter((x) => x !== c);
+    extras = extras.filter((x) => x !== c);
+    changed();
+  });
+  document.querySelectorAll('#period button').forEach((b) => b.addEventListener('click', () => { period = b.dataset.period; changed(); }));
+
+  // ---------- search ----------
+  const search = document.getElementById('cmp-search');
+  const resList = document.getElementById('cmp-results-list');
+  let sTimer = null, sReq = 0;
+  search.addEventListener('input', () => {
+    clearTimeout(sTimer);
+    const q = search.value.trim();
+    if (q.length < 3) { resList.innerHTML = ''; return; }
+    sTimer = setTimeout(async () => {
+      const my = ++sReq;
+      resList.innerHTML = '<li class="muted">Searching…</li>';
+      try {
+        const rows = await Mausam.api('GET', `/api/funds/search?q=${encodeURIComponent(q)}`);
+        if (my !== sReq) return;
+        if (!rows || !rows.length) { resList.innerHTML = '<li class="muted">No funds match that. Try fewer words, or the 6-digit scheme code.</li>'; return; }
+        resList.innerHTML = rows.slice(0, 10).map((r) => {
+          const inList = selected.includes(r.scheme_code);
+          return `<li><span>${esc(r.scheme_name)} <span class="muted small">· ${r.scheme_code}</span></span>
+            <button type="button" class="btn btn-sm" data-add="${r.scheme_code}" data-name="${esc(r.scheme_name)}" ${inList || selected.length >= 5 ? 'disabled' : ''}>${inList ? 'Added' : 'Add'}</button></li>`;
+        }).join('');
+      } catch (e) {
+        if (my === sReq) resList.innerHTML = `<li class="muted">${esc(e.message)}</li>`;
+      }
+    }, 350);
+  });
+  resList.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    const c = parseInt(b.dataset.add, 10);
+    if (selected.length >= 5) { Mausam.toast('You can compare up to 5 funds. Remove one first.', 'error'); return; }
+    if (!selected.includes(c)) {
+      selected.push(c);
+      names[c] = names[c] || b.dataset.name;
+      if (!ownByCode[c]) extras.push(c);
+    }
+    b.disabled = true; b.textContent = 'Added';
+    changed();
+  });
+
+  // ---------- data ----------
+  function fromDate() {
+    if (period === 'MAX') return '1990-01-01';
+    const d = new Date();
+    const months = { '6M': 6, '1Y': 12, '3Y': 36, '5Y': 60 }[period];
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().slice(0, 10);
+  }
+
+  async function load() {
+    const my = ++reqId;
+    if (selected.length < 2) {
+      lastData = null;
+      out.innerHTML = `<div class="panel">${emptyHTML('git-compare', 'Pick at least 2 funds', 'Tick two or more of your funds above, or search for any fund to add it.')}</div>`;
+      Mausam.icons();
+      return;
+    }
+    out.innerHTML = '<div class="panel"><div class="stack" aria-hidden="true" style="gap:10px"><div class="skeleton" style="height:20px;width:60%"></div><div class="skeleton" style="height:300px"></div></div><span class="sr-only">Loading comparison…</span></div>';
+    try {
+      const data = await Mausam.api('GET', `/api/compare?codes=${selected.join(',')}&from=${fromDate()}`);
+      if (my !== reqId) return;
+      lastData = data;
+      render(data);
+    } catch (e) {
+      if (my !== reqId) return;
+      out.innerHTML = `<div class="panel"><div class="notice danger" role="alert"><i data-lucide="info" aria-hidden="true"></i><div>We couldn't build this comparison. ${esc(e.message)} <button type="button" class="btn btn-sm" id="cmp-retry" style="margin-left:8px">Try again</button></div></div></div>`;
+      Mausam.icons();
+      document.getElementById('cmp-retry').addEventListener('click', load);
+    }
+  }
+
+  function emptyHTML(icon, title, text) {
+    return `<div class="empty"><i data-lucide="${icon}" aria-hidden="true"></i><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
+  }
+
+  const monthLabel = (ym) => { if (!ym) return '–'; const [y, mo] = String(ym).split('-'); return Mausam.date(`${y}-${mo}-01`).replace(/^1 /, ''); };
+  const pctCell = (v) => Mausam.pctHTML(v);
+
+  function render(data) {
+    const P = Mausam.palette();
+    const all = data.funds || [];
+    all.forEach((f, i) => {
+      if (f.name) names[f.scheme_code] = f.name;
+      const o = ownByCode[f.scheme_code];
+      f.colour = (o && o.colour) || P.fund[(i + own.length) % P.fund.length];
+    });
+    const good = all.filter((f) => !f.error);
+    const bad = all.filter((f) => f.error);
+    syncPicker();
+    if (good.length < 2) {
+      out.innerHTML = `<div class="panel">${emptyHTML('git-compare', 'Not enough data to compare', 'We need price history for at least 2 of these funds. Try a different fund.')}</div>`;
+      Mausam.icons();
+      return;
+    }
+    const startTxt = Mausam.date(data.start);
+    const short = (f) => esc(f.name || ('Scheme ' + f.scheme_code));
+    const head = good.map((f) => `<th scope="col" class="num"><span class="row" style="justify-content:flex-end"><span class="swatch" style="background:${f.colour};margin-top:5px" aria-hidden="true"></span><a href="/funds/${f.scheme_code}" style="color:var(--ink)">${short(f)}</a></span></th>`).join('');
+    const row = (label, cells) => `<tr><th scope="row">${label}</th>${cells}</tr>`;
+    const cellsFor = (fn) => good.map((f) => `<td>${fn(f)}</td>`).join('');
+    const txtFor = (fn) => good.map((f) => `<td class="text">${fn(f)}</td>`).join('');
+    const ownInfo = (f) => ownByCode[f.scheme_code] || null;
+
+    out.innerHTML = `
+      <div class="stack">
+        ${data.summary ? `<div class="notice" role="note"><i data-lucide="sparkles" aria-hidden="true"></i><div><strong>In short:</strong> ${esc(data.summary)}</div></div>` : ''}
+        ${bad.length ? `<div class="notice warn" role="note"><i data-lucide="info" aria-hidden="true"></i><div>We couldn't find price history for ${bad.map((f) => esc(f.name || ('scheme ' + f.scheme_code))).join(', ')}, so ${bad.length === 1 ? 'it is' : 'they are'} left out.</div></div>` : ''}
+        <section class="panel" aria-labelledby="growth-h">
+          <div class="panel-head"><h2 id="growth-h">₹10,000 invested on ${startTxt}</h2><span class="small muted">value today, if you'd put ₹10,000 in each</span></div>
+          <div class="chart-box lg"><canvas id="growth-chart" role="img" aria-label="Line chart: what ₹10,000 put into each fund on ${startTxt} would be worth over time"></canvas></div>
+          <p class="chart-summary" id="growth-sum"></p>
+        </section>
+        <section class="panel" aria-labelledby="tbl-h">
+          <div class="panel-head"><h2 id="tbl-h">Side by side</h2></div>
+          <div class="table-wrap">
+            <table class="cmp-table">
+              <caption class="sr-only">Returns and risk for each fund, side by side</caption>
+              <thead><tr><th scope="col"><span class="sr-only">Measure</span></th>${head}</tr></thead>
+              <tbody>
+                ${row(`₹10,000 since ${Mausam.date(data.start)}`, cellsFor((f) => `<strong>${Mausam.inr(f.final_value)}</strong>`))}
+                ${row('1 week', cellsFor((f) => pctCell(f.returns.ret_1w)))}
+                ${row('1 month', cellsFor((f) => pctCell(f.returns.ret_1m)))}
+                ${row(T.ytd || 'Year to date', cellsFor((f) => pctCell(f.returns.ret_ytd)))}
+                ${row('1 year', cellsFor((f) => pctCell(f.returns.ret_1y)))}
+                ${row(T.cagr || '3 years (yearly)', cellsFor((f) => pctCell(f.returns.ret_3y_cagr)))}
+                ${row(`${T.vol || 'Volatility'} (1 year)`, cellsFor((f) => f.volatility_1y == null ? '<span class="muted">–</span>' : `${f.volatility_1y.toFixed(1)}% a year`))}
+                ${row(`${T.dd || 'Biggest fall'} in this period`, cellsFor((f) => f.max_drawdown == null ? '<span class="muted">–</span>' : `<span class="loss">▼ −${Math.abs(f.max_drawdown).toFixed(1)}%</span>`))}
+                ${row('Best month', cellsFor((f) => f.best_month ? `${pctCell(f.best_month[1])}<div class="small muted">${monthLabel(f.best_month[0])}</div>` : '<span class="muted">–</span>'))}
+                ${row('Worst month', cellsFor((f) => f.worst_month ? `${pctCell(f.worst_month[1])}<div class="small muted">${monthLabel(f.worst_month[0])}</div>` : '<span class="muted">–</span>'))}
+                ${row('Category', txtFor((f) => ownInfo(f) ? esc(ownInfo(f).category || '–') : 'Not in your list'))}
+                ${row(T.bench || 'Benchmark', txtFor((f) => ownInfo(f) ? esc(ownInfo(f).benchmark || '–') : 'Not in your list'))}
+              </tbody>
+            </table>
+          </div>
+          <p class="chart-summary">Returns over 1 year or less are total growth; the 3-year figure is a yearly average. Volatility is how much the value usually swings in a year: higher means a bumpier ride.</p>
+        </section>
+        <div class="grid">
+          <section class="panel span-7" aria-labelledby="roll-h">
+            <div class="panel-head"><h2 id="roll-h">Rolling 1-year returns</h2><span class="small muted">how consistent each fund is</span></div>
+            <div class="chart-box"><canvas id="roll-chart" role="img" aria-label="Line chart of each fund's 1-year return, measured every two weeks"></canvas></div>
+            <p class="chart-summary" id="roll-sum"></p>
+          </section>
+          <section class="panel span-5" aria-labelledby="corr-h">
+            <div class="panel-head"><h2 id="corr-h">How alike they move</h2><span class="small muted">last 12 months</span></div>
+            <div class="table-wrap" id="corr-wrap"></div>
+            <p class="chart-summary" id="corr-sum"></p>
+          </section>
+        </div>
+      </div>`;
+    Mausam.icons();
+    drawCharts(data, good);
+  }
+
+  function drawCharts(data, good) {
+    const P = Mausam.palette();
+    // Growth
+    Mausam.chart('growth-chart', {
+      type: 'line',
+      data: { datasets: good.map((f) => ({ label: f.name, data: (f.growth || []).map(([x, y]) => ({ x, y })), borderColor: f.colour, backgroundColor: f.colour, fill: false, tension: 0.15 })) },
+      options: { interaction: { mode: 'index', intersect: false },
+        scales: { x: Mausam.timeScale(), y: { ticks: { callback: (v) => Mausam.inr(v) } } },
+        plugins: { legend: { position: 'top', align: 'start' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Mausam.inr(c.raw.y)}` } } } },
+    });
+    const ranked = good.filter((f) => f.final_value != null).sort((a, b) => b.final_value - a.final_value);
+    if (ranked.length) {
+      document.getElementById('growth-sum').textContent = `By the latest price: ` + ranked.map((f) => `${f.name} ${Mausam.inr(f.final_value)}`).join(', ') +
+        `. ${ranked[0].name} came out ahead${ranked.length > 1 ? `, ${Mausam.inr(ranked[0].final_value - ranked[ranked.length - 1].final_value)} more than ${ranked[ranked.length - 1].name}` : ''}.`;
+    }
+
+    // Rolling 1-year
+    const rolled = good.filter((f) => f.rolling_1y && f.rolling_1y.length);
+    if (rolled.length) {
+      Mausam.chart('roll-chart', {
+        type: 'line',
+        data: { datasets: rolled.map((f) => ({ label: f.name, data: f.rolling_1y.map(([x, y]) => ({ x, y })), borderColor: f.colour, backgroundColor: f.colour, fill: false, tension: 0.2, borderWidth: 1.8 })) },
+        options: { interaction: { mode: 'index', intersect: false },
+          scales: { x: Mausam.timeScale(), y: { ticks: { callback: (v) => v + '%' } } },
+          plugins: { legend: { position: 'top', align: 'start' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Mausam.pct(c.raw.y, 1, false)} over the year to this date` } } } },
+      });
+      const spreads = rolled.map((f) => {
+        const ys = f.rolling_1y.map((p) => p[1]);
+        return { f, lo: Math.min(...ys), hi: Math.max(...ys) };
+      }).sort((a, b) => (a.hi - a.lo) - (b.hi - b.lo));
+      const s = spreads[0], w = spreads[spreads.length - 1];
+      let txt = `Each point is the return over the 12 months before that date. ${s.f.name} was the most consistent: its 1-year return stayed between ${Mausam.pct(s.lo, 0, false)} and ${Mausam.pct(s.hi, 0, false)}.`;
+      if (spreads.length > 1) txt += ` ${w.f.name} swung the most, from ${Mausam.pct(w.lo, 0, false)} to ${Mausam.pct(w.hi, 0, false)}.`;
+      document.getElementById('roll-sum').textContent = txt;
+    } else {
+      const box = document.getElementById('roll-chart').parentNode;
+      box.outerHTML = '<p class="muted">These funds need more than a year of prices before we can show rolling returns.</p>';
+    }
+
+    // Correlation matrix (codes order matches the request order, including funds without data)
+    const codes = (data.funds || []).map((f) => f.scheme_code);
+    const idx = good.map((f) => codes.indexOf(f.scheme_code));
+    const M = data.correlation || [];
+    const val = (i, j) => (M[i] && M[i][j] != null ? Number(M[i][j]) : null);
+    let html = '<table class="corr"><caption class="sr-only">Correlation between each pair of funds. 1.00 means they move exactly together.</caption><thead><tr><th scope="col"><span class="sr-only">Fund</span></th>';
+    html += good.map((f) => `<th scope="col"><span class="swatch" style="background:${f.colour}" aria-hidden="true"></span> ${esc(f.name)}</th>`).join('') + '</tr></thead><tbody>';
+    let best = null, worst = null;
+    good.forEach((fa, a) => {
+      html += `<tr><th scope="row" style="text-align:left">${esc(fa.name)}</th>`;
+      good.forEach((fb, b) => {
+        const v = val(idx[a], idx[b]);
+        if (v === null) { html += '<td class="muted" style="background:var(--surface-2)">–</td>'; return; }
+        const strength = Math.max(0, Math.min(1, Math.abs(v)));
+        const bg = a === b ? 'var(--surface-2)' : Mausam.alpha(P.monsoon.startsWith('#') ? P.monsoon : '#0E7C7B', 0.12 + strength * 0.6);
+        const fg = a !== b && strength > 0.7 ? 'var(--monsoon-ink)' : 'var(--ink)';
+        html += `<td style="background:${bg};color:${fg}" title="${esc(fa.name)} and ${esc(fb.name)}: ${v.toFixed(2)}">${v.toFixed(2)}</td>`;
+        if (b > a) {
+          if (!best || v > best.v) best = { v, a: fa.name, b: fb.name };
+          if (!worst || v < worst.v) worst = { v, a: fa.name, b: fb.name };
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('corr-wrap').innerHTML = html;
+    let ctext = '1.00 means two funds rise and fall together every day. Near 0 means they move independently. Funds that move alike give you less variety.';
+    if (best) {
+      ctext += ` The most alike: ${best.a} and ${best.b} (${best.v.toFixed(2)}).`;
+      if (worst && (worst.a !== best.a || worst.b !== best.b)) ctext += ` The least alike: ${worst.a} and ${worst.b} (${worst.v.toFixed(2)}).`;
+    }
+    document.getElementById('corr-sum').textContent = ctext;
+  }
+
+  syncPicker();
+  load();
+  document.addEventListener('mausam:theme', () => { if (lastData) render(lastData); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Alerts{% endblock %}
+
+{% block head %}
+<style>
+  .alert-list { list-style: none; margin: 0; padding: 0; }
+  .alert-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px 14px; align-items: start; padding: 14px 4px; border-bottom: 1px solid var(--line); }
+  .alert-row:last-child { border-bottom: 0; }
+  .alert-row .sev { margin-top: 8px; width: 10px; height: 10px; }
+  .alert-row .msg { font-size: 15px; margin: 0 0 4px; }
+  .alert-row.unread .msg { font-weight: 600; }
+  .alert-row.read { opacity: .78; }
+  .alert-row .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; color: var(--slate); }
+  .sev-label { font-weight: 600; }
+  .sev-label.info { color: var(--monsoon); }
+  .sev-label.watch { color: color-mix(in srgb, var(--saffron) 70%, var(--ink)); }
+  .sev-label.action { color: var(--plum); }
+  .new-dot { font-size: 11px; padding: 1px 8px; }
+  .alert-row .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .sev-key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--slate); margin-top: 12px; }
+  .sev-key span { display: inline-flex; align-items: center; gap: 6px; }
+  .sev-key .sev { margin: 0; }
+  @media (max-width: 600px) {
+    .alert-row { grid-template-columns: auto 1fr; }
+    .alert-row .actions { grid-column: 2; justify-content: flex-start; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set SEV = {'info': 'For your information', 'watch': 'Worth watching', 'action': 'Worth reviewing'} %}
+{% set unread = alerts|selectattr('read_at', 'none')|list %}
+
+<div class="page-head">
+  <div>
+    <h1>Alerts</h1>
+    <p>Things Mausam noticed about your funds and reports. Most need nothing from you; they're here so you're never surprised.</p>
+  </div>
+  {% if alerts %}
+  <button class="btn" type="button" id="read-all" {% if not unread %}disabled{% endif %}><i data-lucide="check-check" aria-hidden="true"></i>Mark all as read</button>
+  {% endif %}
+</div>
+
+<section class="panel" aria-labelledby="alerts-h">
+  <h2 id="alerts-h" class="sr-only">All alerts</h2>
+  {% if alerts %}
+  <div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <div class="segmented" role="group" aria-label="Filter alerts" id="filters">
+      <button type="button" data-f="all" aria-pressed="true">All <span class="num" data-count="all">{{ alerts|length }}</span></button>
+      <button type="button" data-f="unread" aria-pressed="false">Unread <span class="num" data-count="unread">{{ unread|length }}</span></button>
+      <button type="button" data-f="action" aria-pressed="false">Worth reviewing <span class="num" data-count="action">{{ alerts|selectattr('severity', 'equalto', 'action')|list|length }}</span></button>
+      <button type="button" data-f="watch" aria-pressed="false">Watching <span class="num" data-count="watch">{{ alerts|selectattr('severity', 'equalto', 'watch')|list|length }}</span></button>
+      <button type="button" data-f="info" aria-pressed="false">Info <span class="num" data-count="info">{{ alerts|selectattr('severity', 'equalto', 'info')|list|length }}</span></button>
+    </div>
+  </div>
+
+  <ul class="alert-list" id="alert-list">
+    {% for a in alerts %}
+    {% set sev = a.severity if a.severity in SEV else 'info' %}
+    {% set is_report = a.link and a.link.startswith('/reports') %}
+    <li class="alert-row {{ 'read' if a.read_at else 'unread' }}" data-id="{{ a.id }}" data-sev="{{ sev }}" data-read="{{ '1' if a.read_at else '0' }}">
+      <span class="sev {{ sev }}" aria-hidden="true"></span>
+      <div style="min-width:0">
+        <p class="msg">{{ a.message }}</p>
+        <div class="meta">
+          <span class="sev-label {{ sev }}">{{ SEV[sev] }}</span>
+          {% if a.kind %}<span>{{ a.kind|replace('_', ' ')|capitalize }}</span>{% endif %}
+          {% if a.short_name %}<span>{{ a.short_name }}</span>{% endif %}
+          <span>{{ a.created_at|dt }}</span>
+          {% if not a.read_at %}<span class="chip teal new-dot">New</span>{% endif %}
+        </div>
+      </div>
+      <div class="actions">
+        {% if a.link %}
+        <a class="btn btn-sm" href="{{ a.link }}"><i data-lucide="{{ 'newspaper' if is_report else 'arrow-right' }}" aria-hidden="true"></i>{{ 'Open report' if is_report else ('Open fund' if a.link.startswith('/funds') else 'Open') }}</a>
+        {% endif %}
+        {% if not a.read_at %}
+        <button class="btn btn-sm btn-ghost" type="button" data-read-btn aria-label="Mark as read: {{ a.message|truncate(60) }}"><i data-lucide="check" aria-hidden="true"></i>Mark as read</button>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="muted" id="no-match" hidden style="text-align:center;padding:24px 0;margin:0">Nothing here for this filter. Calm skies.</p>
+
+  <div class="sev-key" aria-label="What the colours mean">
+    <span><span class="sev info" aria-hidden="true"></span>For your information</span>
+    <span><span class="sev watch" aria-hidden="true"></span>Worth watching: keep an eye on it</span>
+    <span><span class="sev action" aria-hidden="true"></span>Worth reviewing: take a calm look when you can</span>
+  </div>
+  {% else %}
+  {{ m.empty('bell-off', 'No alerts', "Nothing needs your attention. Mausam will tell you here if a fund lags its benchmark for a while, your mix drifts from your target, data goes stale, or a new report is ready.") }}
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const list = document.getElementById('alert-list');
+  if (!list) return;
+  const noMatch = document.getElementById('no-match');
+  const readAll = document.getElementById('read-all');
+  let filter = 'all';
+  try { const saved = sessionStorage.getItem('mausam-alert-filter'); if (saved) filter = saved; } catch (e) {}
+
+  const rows = () => Array.from(list.querySelectorAll('.alert-row'));
+  function apply() {
+    let shown = 0;
+    rows().forEach((r) => {
+      const ok = filter === 'all' || (filter === 'unread' ? r.dataset.read === '0' : r.dataset.sev === filter);
+      r.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    noMatch.hidden = shown > 0;
+    document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === filter)));
+  }
+  function counts() {
+    const unread = rows().filter((r) => r.dataset.read === '0').length;
+    const c = document.querySelector('[data-count="unread"]');
+    if (c) c.textContent = unread;
+    if (readAll) readAll.disabled = unread === 0;
+    // keep the bell in the top bar in step
+    const bell = document.querySelector('.topbar .badge-count');
+    if (bell) { if (unread === 0) bell.remove(); else bell.textContent = unread < 100 ? unread : '99+'; }
+  }
+  function markRowRead(r) {
+    r.dataset.read = '1';
+    r.classList.remove('unread'); r.classList.add('read');
+    const chip = r.querySelector('.new-dot'); if (chip) chip.remove();
+    const b = r.querySelector('[data-read-btn]'); if (b) b.remove();
+  }
+
+  document.getElementById('filters').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-f]');
+    if (!b) return;
+    filter = b.dataset.f;
+    try { sessionStorage.setItem('mausam-alert-filter', filter); } catch (err) {}
+    apply();
+  });
+
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-read-btn]');
+    if (!b) return;
+    const r = b.closest('.alert-row');
+    Mausam.busy(b, async () => {
+      try {
+        await Mausam.api('POST', `/api/alerts/${r.dataset.id}/read`);
+        markRowRead(r); counts(); apply();
+      } catch (err) { Mausam.toast(err.message, 'error'); }
+    });
+  });
+
+  if (readAll) readAll.addEventListener('click', () => Mausam.busy(readAll, async () => {
+    try {
+      const res = await Mausam.api('POST', '/api/alerts/read-all');
+      rows().forEach(markRowRead); counts(); apply();
+      Mausam.toast(res && res.updated ? `Marked ${res.updated} alert${res.updated === 1 ? '' : 's'} as read.` : 'All caught up.');
+    } catch (err) { Mausam.toast(err.message, 'error'); }
+  }).then(counts));
+
+  apply();
+})();
+</script>
+{% endblock %}

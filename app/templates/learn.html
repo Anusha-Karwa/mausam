@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Learn{% endblock %}
+
+{% block head %}
+<style>
+  .learn-search { position: relative; max-width: 460px; }
+  .learn-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--slate); pointer-events: none; }
+  .learn-search input { padding-left: 38px; }
+  .glossary { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+  .glossary li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; scroll-margin-top: 80px; }
+  .glossary li:target { border-color: var(--monsoon); box-shadow: 0 0 0 3px var(--monsoon-soft); }
+  .glossary h3 { margin: 0; font-size: 17px; }
+  .glossary .def { margin: 0; }
+  .glossary .why-line { margin: 0; font-size: 14px; color: var(--slate); padding-top: 6px; border-top: 1px dashed var(--line); display: flex; gap: 6px; align-items: flex-start; }
+  .glossary .why-line svg { width: 15px; height: 15px; flex: none; margin-top: 3px; color: var(--saffron); }
+  .glossary mark { background: var(--saffron-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+  .explainers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 760px) { .explainers { grid-template-columns: 1fr; } }
+  .explainer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0; scroll-margin-top: 80px; }
+  .explainer summary { list-style: none; padding: 16px 18px; display: flex; align-items: center; gap: 10px; font-family: var(--font-head); font-size: 17px; }
+  .explainer summary::-webkit-details-marker { display: none; }
+  .explainer summary .chev { margin-left: auto; width: 18px; height: 18px; color: var(--slate); transition: transform .15s; flex: none; }
+  .explainer[open] summary .chev { transform: rotate(180deg); }
+  .explainer summary .num-badge { width: 26px; height: 26px; border-radius: 50%; background: var(--monsoon-soft); color: var(--monsoon); display: grid; place-items: center; font: 600 13px var(--font-body); flex: none; }
+  .explainer .body { padding: 0 18px 16px 54px; }
+  .explainer .body p:last-child { margin-bottom: 0; }
+  .explainer[open] { border-color: color-mix(in srgb, var(--monsoon) 40%, var(--line)); }
+  .jump { display: flex; flex-wrap: wrap; gap: 8px; }
+  .jump a { text-decoration: none; }
+  .ask-cta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: linear-gradient(135deg, var(--monsoon-soft), var(--surface) 70%); }
+  .ask-cta svg.big { width: 34px; height: 34px; color: var(--monsoon); flex: none; }
+  .ask-cta div { flex: 1; min-width: 220px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Learn</h1>
+    <p>Every money word Mausam uses, in plain English, plus short explainers on how funds work. Words with a dotted underline anywhere in the app link back to these definitions.</p>
+  </div>
+</div>
+
+<div class="stack">
+  <section aria-labelledby="explain-h">
+    <div class="panel-head"><h2 id="explain-h">Short explainers</h2><span class="muted small">A two-minute read each</span></div>
+    <nav class="jump" aria-label="Jump to an explainer" style="margin-bottom:14px">
+      {% for e in explainers %}<a class="chip" href="#{{ e.slug }}">{{ e.title }}</a>{% endfor %}
+    </nav>
+    <div class="explainers">
+      {% for e in explainers %}
+      <details class="explainer" id="{{ e.slug }}" {% if loop.first %}open{% endif %}>
+        <summary><span class="num-badge" aria-hidden="true">{{ loop.index }}</span><span>{{ e.title }}</span><i class="chev" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+        <div class="body">
+          {% for para in e.body %}<p>{{ para }}</p>{% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section aria-labelledby="gloss-h">
+    <div class="panel-head">
+      <h2 id="gloss-h">Glossary</h2>
+      <span class="muted small" id="gloss-count" aria-live="polite">{{ terms|length }} terms</span>
+    </div>
+    <div class="learn-search" style="margin-bottom:16px">
+      <i data-lucide="search" aria-hidden="true"></i>
+      <label for="gloss-q" class="sr-only">Search the glossary</label>
+      <input type="search" id="gloss-q" placeholder="Search a word, like XIRR or benchmark" autocomplete="off">
+    </div>
+    <ul class="glossary" id="glossary">
+      {% for t in terms %}
+      <li id="term-{{ t.key|replace(' ', '-') }}" data-text="{{ (t.term ~ ' ' ~ t.short ~ ' ' ~ t.why)|lower }}">
+        <h3 data-raw="{{ t.term }}">{{ t.term }}</h3>
+        <p class="def" data-raw="{{ t.short }}">{{ t.short }}</p>
+        <p class="why-line"><i data-lucide="sparkles" aria-hidden="true"></i><span><span class="sr-only">Why it matters to you: </span><span data-raw="{{ t.why }}">{{ t.why }}</span></span></p>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="panel" id="gloss-empty" hidden>
+      {{ m.empty('search-x', 'No words match that search', 'Try a shorter word, or ask Mausam to explain it in your own words.', '/ask', 'Ask Mausam') }}
+    </div>
+  </section>
+
+  <section class="panel ask-cta" aria-labelledby="ask-h">
+    <i class="big" data-lucide="message-circle" aria-hidden="true"></i>
+    <div>
+      <h2 id="ask-h" style="font-size:17px;margin-bottom:4px">Still unsure about something?</h2>
+      <p class="muted" style="margin:0">Ask Mausam can explain any of these using your own funds as the example.</p>
+    </div>
+    <a class="btn btn-primary" href="/ask"><i data-lucide="arrow-right" aria-hidden="true"></i>Ask Mausam</a>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const M = window.Mausam;
+  const q = document.getElementById('gloss-q');
+  const items = M.$$('#glossary li');
+  const count = document.getElementById('gloss-count');
+  const emptyBox = document.getElementById('gloss-empty');
+  const total = items.length;
+
+  function highlight(el, needle) {
+    const raw = el.dataset.raw;
+    if (!needle) { el.textContent = raw; return; }
+    const idx = raw.toLowerCase().indexOf(needle);
+    if (idx < 0) { el.textContent = raw; return; }
+    el.innerHTML = M.esc(raw.slice(0, idx)) + '<mark>' + M.esc(raw.slice(idx, idx + needle.length)) + '</mark>' + M.esc(raw.slice(idx + needle.length));
+  }
+
+  function filter() {
+    const needle = q.value.trim().toLowerCase();
+    let shown = 0;
+    items.forEach((li) => {
+      const match = !needle || li.dataset.text.includes(needle);
+      li.hidden = !match;
+      if (match) shown++;
+      M.$$('[data-raw]', li).forEach((el) => highlight(el, match ? needle : ''));
+    });
+    count.textContent = needle ? `${shown} of ${total} terms` : `${total} terms`;
+    emptyBox.hidden = shown !== 0;
+  }
+  q.addEventListener('input', filter);
+  q.addEventListener('keydown', (e) => { if (e.key === 'Escape') { q.value = ''; filter(); } });
+
+  // Open an explainer when its link or the page URL points at it.
+  function openFromHash() {
+    const id = decodeURIComponent((location.hash || '').slice(1));
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (el && el.tagName === 'DETAILS') { el.open = true; el.scrollIntoView({ block: 'start' }); }
+  }
+  window.addEventListener('hashchange', openFromHash);
+  openFromHash();
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('q')) { q.value = params.get('q'); filter(); }
+})();
+</script>
+{% endblock %}

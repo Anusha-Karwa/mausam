@@ -1,0 +1,41 @@
+{# Shared macros. Import with: {% import "partials/macros.html" as m %} #}
+
+{% macro empty(icon, title, text, href=None, cta=None) -%}
+<div class="empty">
+  <i data-lucide="{{ icon }}" aria-hidden="true"></i>
+  <h3>{{ title }}</h3>
+  <p>{{ text }}</p>
+  {% if href %}<a class="btn btn-primary" href="{{ href }}">{{ cta }}</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro skeleton(lines=3, height=16) -%}
+<div class="stack" aria-hidden="true" style="gap:10px">
+  {% for i in range(lines) %}<div class="skeleton" style="height:{{ height }}px;width:{{ [100, 85, 70, 92, 60][i % 5] }}%"></div>{% endfor %}
+</div>
+<span class="sr-only">Loading…</span>
+{%- endmacro %}
+
+{% macro notice(text, kind='', icon='info') -%}
+<div class="notice {{ kind }}" role="note"><i data-lucide="{{ icon }}" aria-hidden="true"></i><div>{{ text }}</div></div>
+{%- endmacro %}
+
+{% macro gap_chip(gap, ref_label='benchmark') -%}
+{% if gap is none %}<span class="chip">No {{ ref_label }} figure</span>
+{% elif gap >= 0 %}<span class="chip gain">▲ Beat {{ ref_label }} by {{ '%.2f'|format(gap) }} pts</span>
+{% else %}<span class="chip loss">▼ Behind {{ ref_label }} by {{ '%.2f'|format(-gap) }} pts</span>{% endif %}
+{%- endmacro %}
+
+{% macro attribution_chip(code) -%}
+{% set cls = {'market_wide': 'teal', 'fund_specific': 'warn', 'mixed': '', 'insufficient_data': ''}[code or 'insufficient_data'] %}
+<span class="chip {{ cls }}" data-tip="{{ glossary['attribution'].short }}">{{ code|attribution }}</span>
+{%- endmacro %}
+
+{% macro weather_icon(verdict, size=20) -%}
+{% set w = weather(verdict) %}
+<span class="row" style="gap:6px;display:inline-flex"><i data-lucide="{{ w.icon }}" aria-hidden="true" style="width:{{ size }}px;height:{{ size }}px;color:{{ {'clear':'var(--saffron)','clouds':'var(--slate)','storm':'var(--plum)'}.get(w.key, 'var(--monsoon)') }}"></i><span>{{ w.label }}</span></span>
+{%- endmacro %}
+
+{% macro json_data(id, value) -%}
+<script type="application/json" id="{{ id }}">{{ value|tojson }}</script>
+{%- endmacro %}

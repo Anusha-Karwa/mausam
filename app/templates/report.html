@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Report · week ending {{ week|d }}{% endblock %}
+
+{% block head %}
+<style>
+  .report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .report-head .kicker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--slate); font-size: 14px; }
+  .report-head h1 { margin: 6px 0 0; }
+  .report-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .report-panel { max-width: 920px; }
+  .meta-line { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--slate); }
+  .meta-line span { display: inline-flex; align-items: center; gap: 6px; }
+  .meta-line svg { width: 14px; height: 14px; }
+  .guard-list { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
+  .guard-list li { margin-bottom: 4px; word-break: break-word; }
+  details.numbers > summary { list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.numbers > summary::-webkit-details-marker { display: none; }
+  details.numbers > summary svg { width: 18px; height: 18px; color: var(--monsoon); transition: transform .2s; }
+  details.numbers[open] > summary .chev { transform: rotate(90deg); }
+  @media print {
+    .report-panel { max-width: none; border: 0 !important; padding: 0 !important; }
+    .report-head h1 { font-size: 22px; }
+  }
+  @media (max-width: 560px) { .report-actions .btn { flex: 1 1 100%; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set meta = (rj.get('_meta') if rj else none) or {} %}
+{% set guard_errors = meta.get('errors') or [] %}
+
+<p class="no-print small" style="margin:0 0 10px"><a href="/reports"><i data-lucide="arrow-left" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px"></i> All reports</a></p>
+
+<div class="report-head">
+  <div>
+    <div class="kicker">
+      {{ m.weather_icon(rep.verdict, 22) }}
+      <span aria-hidden="true">·</span>
+      <span>Week ending {{ week|d }}</span>
+      {% if rep.used_fallback %}<span class="chip warn" data-tip="Gemini was unavailable or its draft failed Mausam's checks, so this report was written with the plain template. The numbers are the same.">Plain template</span>{% endif %}
+    </div>
+    <h1>Your weekly weather report</h1>
+  </div>
+  <div class="report-actions no-print">
+    <button class="btn" type="button" id="email-report"><i data-lucide="mail" aria-hidden="true"></i>Email me this report</button>
+    <button class="btn" type="button" id="print-report"><i data-lucide="printer" aria-hidden="true"></i>Print / save as PDF</button>
+    <button class="btn btn-primary" type="button" id="gen-report"><i data-lucide="sparkles" aria-hidden="true"></i>Generate this week's report now</button>
+  </div>
+</div>
+
+<div class="panel no-print" id="gen-panel" hidden style="margin-bottom:20px" role="status" aria-live="polite">
+  <div class="row" style="align-items:flex-start">
+    <i data-lucide="pen-line" aria-hidden="true" style="width:20px;height:20px;color:var(--monsoon)"></i>
+    <div style="flex:1;min-width:0">
+      <strong id="gen-step">Gathering this week's numbers…</strong>
+      <div class="small muted">This usually takes 30 to 90 seconds. Please keep this page open. <span id="gen-elapsed"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="stack">
+  <section class="panel report-panel" aria-label="Report">
+    {% include "partials/report_body.html" %}
+  </section>
+
+  <section class="panel report-panel" aria-labelledby="about-h">
+    <h2 id="about-h" style="font-size:17px">How this report was made</h2>
+    <div class="meta-line">
+      <span><i data-lucide="cpu" aria-hidden="true"></i>Written by {{ 'the plain template (no AI)' if rep.used_fallback or rep.model == 'fallback-template' else (rep.model or 'Gemini Flash') }}</span>
+      <span><i data-lucide="clock" aria-hidden="true"></i>Generated {{ rep.generated_at|dt }}</span>
+      <span><i data-lucide="zap" aria-hidden="true"></i>{{ {'manual': 'Made by hand with the “Generate” button', 'cron': 'Made automatically on Saturday morning', 'scheduled': 'Made automatically on Saturday morning', 'seed': 'Created with the demo data'}.get(rep.trigger, 'Trigger: ' ~ (rep.trigger or 'unknown')) }}</span>
+      <span><i data-lucide="{{ 'mail-check' if rep.emailed_at else 'mail-x' }}" aria-hidden="true"></i>{{ ('Emailed ' ~ (rep.emailed_at|dt)) if rep.emailed_at else 'Not emailed yet' }}</span>
+      <span><i data-lucide="{{ 'file-text' if rep.used_fallback else 'sparkles' }}" aria-hidden="true"></i>Plain template used: {{ 'yes' if rep.used_fallback else 'no' }}</span>
+    </div>
+
+    {% if guard_errors %}
+    <div class="notice {{ 'warn' if rep.used_fallback else '' }}" style="margin-top:14px" role="note">
+      <i data-lucide="shield-check" aria-hidden="true"></i>
+      <div>
+        <strong>Mausam's checks rejected {{ guard_errors|length }} draft{{ '' if guard_errors|length == 1 else 's' }} this week.</strong>
+        Before anything is saved, code checks the AI's draft: every number must match the facts below, the verdict must match the one Mausam's rules picked, and there must be no buy, sell or switch instructions.
+        {% if rep.used_fallback %}No draft passed, so this report was written with the plain template instead. The numbers and verdict are exactly the same.{% else %}A later draft passed every check, and that is the one you are reading.{% endif %}
+        <details style="margin-top:8px">
+          <summary class="small">Why the draft{{ '' if guard_errors|length == 1 else 's' }} were rejected</summary>
+          <ul class="guard-list">{% for e in guard_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </details>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel report-panel no-print" aria-labelledby="numbers-h">
+    <details class="numbers" id="numbers">
+      <summary><i class="chev" data-lucide="chevron-right" aria-hidden="true"></i><span id="numbers-h">See the numbers behind this report</span></summary>
+      <p class="small muted" style="margin:12px 0">These are the exact facts Mausam's code computed and handed to the writer. Nothing in the report should go beyond them. Returns are in percent; gaps are in percentage points.</p>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn btn-sm" type="button" id="copy-facts"><i data-lucide="copy" aria-hidden="true"></i>Copy</button>
+        <button class="btn btn-sm" type="button" id="download-facts"><i data-lucide="download" aria-hidden="true"></i>Download as JSON</button>
+      </div>
+      <pre class="code" id="facts-pre" tabindex="0" aria-label="Facts behind this report, as JSON">Loading…</pre>
+    </details>
+  </section>
+</div>
+{{ m.json_data('facts-data', facts) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const WEEK = '{{ week.isoformat() }}';
+  const facts = Mausam.data('facts-data') || {};
+  const pretty = JSON.stringify(facts, null, 2);
+  const pre = document.getElementById('facts-pre');
+  pre.textContent = pretty;
+
+  document.getElementById('copy-facts').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(pretty); Mausam.toast('Copied the numbers to your clipboard.'); }
+    catch (e) { Mausam.toast('Could not copy. Select the text and copy it by hand.', 'error'); }
+  });
+  document.getElementById('download-facts').addEventListener('click', () => {
+    const blob = new Blob([pretty], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mausam-facts-${WEEK}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  document.getElementById('print-report').addEventListener('click', () => window.print());
+
+  const emailBtn = document.getElementById('email-report');
+  emailBtn.addEventListener('click', () => Mausam.busy(emailBtn, async () => {
+    try {
+      const res = await Mausam.api('POST', `/api/reports/${WEEK}/email`);
+      Mausam.toast(res && res.sent_to ? `Sent. Check ${res.sent_to} in a minute or two.` : 'Sent. Check your inbox in a minute or two.');
+    } catch (e) { Mausam.toast(e.message, 'error'); }
+  }));
+
+  const gen = document.getElementById('gen-report');
+  const panel = document.getElementById('gen-panel');
+  const step = document.getElementById('gen-step');
+  const elapsed = document.getElementById('gen-elapsed');
+  const STEPS = [[0, "Gathering this week's numbers…"], [10, 'Comparing each fund with its benchmark and category…'],
+    [20, "Reading the week's market news…"], [30, 'Gemini is writing the report…'],
+    [50, 'Checking every number in the draft against the facts…'], [75, 'Almost there. Saving the report…']];
+  gen.addEventListener('click', () => Mausam.busy(gen, async () => {
+    panel.hidden = false; Mausam.icons();
+    const start = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - start) / 1000);
+      elapsed.textContent = `(${s} s so far)`;
+      for (const [at, text] of STEPS) if (s >= at) step.textContent = text;
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    try {
+      const res = await Mausam.api('POST', '/api/reports/generate');
+      clearInterval(timer);
+      step.textContent = 'Done. Opening the new report…';
+      const wk = res && res.week ? String(res.week).slice(0, 10) : WEEK;
+      setTimeout(() => { if (wk === WEEK) location.reload(); else location.href = `/reports/${wk}`; }, 700);
+    } catch (e) {
+      clearInterval(timer);
+      panel.hidden = true;
+      Mausam.toast(e.message, 'error');
+    }
+  }));
+})();
+</script>
+{% endblock %}

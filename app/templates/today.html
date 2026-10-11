@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Today{% endblock %}
+{% block content %}
+<div class="stack">
+
+  {# ---- Weather hero: the signature element ---- #}
+  {% if report %}
+  <a class="hero {{ sky.key }}" href="/reports/{{ report.week_ending.isoformat() }}" aria-label="{{ sky.label }}. {{ report.report_json.headline }}. Open the full report.">
+    <div>
+      <div class="hero-kicker"><i data-lucide="calendar" aria-hidden="true" style="width:15px;height:15px"></i>
+        Week ending {{ report.week_ending|d }}
+        {% if report.used_fallback %}<span class="chip" title="Gemini was unavailable or its draft failed our checks, so this report used the plain template.">Plain template</span>{% endif %}
+      </div>
+      <div class="hero-label">{{ sky.label }}</div>
+      <p class="hero-headline">{{ report.report_json.headline }}</p>
+      <p class="muted" style="max-width:520px;margin-bottom:12px">{{ report.verdict }}. {{ report.verdict_reason }}</p>
+      <span class="hero-cta">Read this week's report <i data-lucide="arrow-right" aria-hidden="true"></i></span>
+    </div>
+    <div class="hero-sky">{% with kind=sky.key, animate=true %}{% include "partials/weather_sky.html" %}{% endwith %}</div>
+  </a>
+  {% else %}
+  <div class="hero unknown">
+    <div>
+      <div class="hero-kicker">Your first report</div>
+      <div class="hero-label">No forecast yet</div>
+      <p class="hero-headline">Mausam writes a plain-language weather report on your funds every Saturday morning.</p>
+      {% if summary.funds %}
+      <button class="btn btn-primary" type="button" id="gen-report"><i data-lucide="sparkles" aria-hidden="true"></i>Generate this week's report now</button>
+      {% else %}
+      <a class="btn btn-primary" href="/manage"><i data-lucide="plus" aria-hidden="true"></i>Add your first fund</a>
+      {% endif %}
+    </div>
+    <div class="hero-sky">{% with kind='unknown', animate=true %}{% include "partials/weather_sky.html" %}{% endwith %}</div>
+  </div>
+  {% endif %}
+
+  {% if not summary.funds %}
+  <div class="panel">{{ m.empty('list-plus', 'Add your funds to get started', 'Type a fund name or its scheme code on the Manage funds page. Mausam fetches its full history automatically.', '/manage', 'Add a fund') }}</div>
+  {% else %}
+
+  {# ---- Value band ---- #}
+  <section class="panel" aria-labelledby="value-h">
+    <h2 id="value-h" class="sr-only">Your portfolio value</h2>
+    <div class="value-band">
+      <div class="stat">
+        <span class="stat-label">Portfolio value</span>
+        <span class="stat-value xl">{{ summary.value|inr }}</span>
+        <span class="stat-sub">
+          {% if summary.day_change_pct is not none %}
+            <span class="num {{ summary.day_change|signed_class }}">{{ summary.day_change|inr(signed=true) }} ({{ summary.day_change_pct|pct(arrow=false) }})</span>
+            <span class="muted">on {{ summary.as_of|d('short') }}</span>
+          {% else %}<span class="muted">No daily change yet</span>{% endif %}
+        </span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Total gain since you started</span>
+        <span class="stat-value">{{ summary.gain|money(signed=true) }}</span>
+        <span class="stat-sub">{{ summary.gain_pct|pct }} on {{ summary.invested|inr }} invested</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">{{ term('xirr', 'XIRR') }} (yearly return)</span>
+        <span class="stat-value">{{ summary.xirr|pct(arrow=false) }}</span>
+        <span class="stat-sub muted">accounts for when you invested</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Next SIP</span>
+        {% if sips %}
+          {% set s = sips[0] %}
+          <span class="stat-value">{{ 'Today' if s.days == 0 else ('in ' ~ s.days ~ (' day' if s.days == 1 else ' days')) }}</span>
+          <span class="stat-sub">Your {{ s.name|lower }} {{ term('sip', 'SIP') }} of {{ s.amount|inr }} is due on {{ s.date|d('short') }}</span>
+        {% else %}
+          <span class="stat-value muted">–</span><span class="stat-sub"><a href="/manage">Set SIP dates</a></span>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  {# ---- Tip + alerts ---- #}
+  <div class="grid">
+    <section class="panel tip-card span-8" aria-labelledby="tip-h">
+      <div class="panel-head"><h2 id="tip-h" style="font-size:17px">One thing to know today</h2>
+        {% if tip %}<span class="muted small">{{ tip.tip_date|d('short') }}</span>{% endif %}</div>
+      {% if tip %}<p class="tip-text">{{ tip.tip }}</p>
+      {% else %}<p class="muted">Your daily tip appears after the first nightly data refresh.</p>{% endif %}
+    </section>
+    <section class="panel span-4" aria-labelledby="alerts-h">
+      <div class="panel-head"><h2 id="alerts-h" style="font-size:17px">Alerts</h2><a href="/alerts" class="small">See all</a></div>
+      {% if alerts %}
+        {% for a in alerts %}
+        <div class="alert-item"><span class="sev {{ a.severity }}" aria-hidden="true"></span>
+          <div><span class="sr-only">{{ a.severity }}:</span>{% if a.link %}<a href="{{ a.link }}" style="color:inherit">{{ a.message }}</a>{% else %}{{ a.message }}{% endif %}</div></div>
+        {% endfor %}
+      {% else %}<p class="muted" style="margin:0">Nothing needs your attention. Calm skies.</p>{% endif %}
+    </section>
+  </div>
+
+  {# ---- Five fund tiles ---- #}
+  <section aria-labelledby="funds-h">
+    <div class="panel-head"><h2 id="funds-h">Your funds</h2><a href="/portfolio" class="small">Full portfolio</a></div>
+    <div class="fund-row">
+      {% for t in tiles %}
+      <a class="fund-tile" href="/funds/{{ t.scheme_code }}" style="--fund: {{ t.colour or 'var(--monsoon)' }}">
+        <span class="name">{{ t.name }}</span>
+        <span class="nav">{{ term('nav', 'NAV') }} ₹{{ t.nav|num(2) }} · {{ t.nav_date|d('short') }}</span>
+        <div class="moves">
+          <span>1 day {{ t.day_change_pct|pct }}</span>
+          <span>1 week {{ t.ret_1w|pct }}</span>
+        </div>
+        <canvas class="spark" data-points='{{ t.spark|dumps }}' aria-label="30-day NAV trend" role="img"></canvas>
+        <div class="chips">
+          {{ m.gap_chip(t.gap, t.gap_ref) }}
+          {% if t.attribution %}{{ m.attribution_chip(t.attribution) }}{% endif %}
+          {% if t.stale %}<span class="chip warn"><i data-lucide="clock" aria-hidden="true"></i>Stale data</span>{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---- Market strip ---- #}
+  <section class="panel" aria-labelledby="mkt-h">
+    <div class="panel-head"><h2 id="mkt-h" style="font-size:17px">Markets</h2><a href="/market" class="small">Market pulse</a></div>
+    <div class="market-strip">
+      {% for c in strip %}
+      <div>
+        <div class="muted small">{{ c.label }}</div>
+        {% if c.available %}
+        <div class="num" style="font-weight:600;font-size:17px">{{ c.level|num(2) }}</div>
+        <div class="small">Day {{ c.ret_1d|pct }} · Week {{ c.ret_1w|pct }}</div>
+        {% if c.source == 'proxy' %}<div class="small muted">via index fund</div>{% endif %}
+        {% else %}<div class="muted">No data yet</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---- News ---- #}
+  <section class="panel" aria-labelledby="news-h">
+    <div class="panel-head"><h2 id="news-h" style="font-size:17px">In the news</h2><a href="/market" class="small">More news</a></div>
+    {% if news %}
+    <ul class="news-list">
+      {% for n in news %}
+      <li>
+        <a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>
+        <span class="news-meta">{{ n.source }}{% if n.published_at %} · {{ n.published_at|d('short') }}{% endif %}</span>
+        {% if n.why_it_matters %}<span class="why">Why it matters: {{ n.why_it_matters }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted" style="margin:0">News arrives with the nightly refresh and the Saturday report.</p>{% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('canvas.spark').forEach((c) => {
+    try { Mausam.sparkline(c, JSON.parse(c.dataset.points || '[]')); } catch (e) {}
+  });
+  const gen = document.getElementById('gen-report');
+  if (gen) gen.addEventListener('click', () => Mausam.busy(gen, async () => {
+    try {
+      Mausam.toast('Generating your report. This takes about 30–60 seconds…');
+      await Mausam.api('POST', '/api/reports/generate');
+      location.reload();
+    } catch (e) { Mausam.toast(e.message, 'error'); }
+  }));
+</script>
+{% endblock %}

@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Calculators{% endblock %}
+
+{% block head %}
+<style>
+  .calc-tabs { margin-bottom: 4px; }
+  .calc-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+  .calc-tabs svg { width: 15px; height: 15px; }
+  .calc-intro { color: var(--slate); margin: 0 0 16px; max-width: 640px; }
+  .calc-inputs .field:last-of-type { margin-bottom: 8px; }
+  .input-unit { position: relative; }
+  .input-unit input { padding-right: 64px; }
+  .input-unit .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--slate); pointer-events: none; }
+  .calc-result {
+    font-size: 17px; line-height: 1.5; padding: 14px 16px; border-radius: var(--r-sm);
+    background: var(--monsoon-soft); border-left: 4px solid var(--monsoon); margin: 0 0 16px;
+  }
+  .calc-result.invalid { background: var(--loss-soft); border-left-color: var(--loss); }
+  .calc-result strong { font-variant-numeric: tabular-nums; }
+  .calc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .calc-stats .stat-value { font-size: 21px; }
+  @media (max-width: 560px) { .calc-stats { grid-template-columns: 1fr 1fr; } .calc-result { font-size: 15px; } }
+  .calc-note { font-size: 13px; color: var(--slate); display: flex; gap: 6px; align-items: flex-start; }
+  .calc-note svg { width: 15px; height: 15px; flex: none; margin-top: 2px; color: var(--saffron); }
+  .field-error { font-size: 13px; color: var(--loss); margin-top: 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro field(calc, name, label, value, min, max, step, unit, hint=None) -%}
+<div class="field">
+  <label for="{{ calc }}-{{ name }}">{{ label }}</label>
+  <div class="input-unit">
+    <input type="number" inputmode="decimal" id="{{ calc }}-{{ name }}" name="{{ name }}" value="{{ value }}"
+           min="{{ min }}" max="{{ max }}" step="{{ step }}" data-min="{{ min }}" data-max="{{ max }}"
+           aria-describedby="{{ calc }}-{{ name }}-hint {{ calc }}-{{ name }}-err">
+    <span class="unit" aria-hidden="true">{{ unit }}</span>
+  </div>
+  <div class="hint" id="{{ calc }}-{{ name }}-hint">{% if hint %}{{ hint }}{% endif %}</div>
+  <div class="field-error" id="{{ calc }}-{{ name }}-err" aria-live="polite"></div>
+</div>
+{%- endmacro %}
+
+{% macro rate_note() -%}
+<p class="calc-note"><i data-lucide="info" aria-hidden="true"></i><span>Returns are not guaranteed; this is an illustration. Equity funds have returned very different amounts in different decades, and some years are negative.</span></p>
+{%- endmacro %}
+
+{% macro output(calc, chart_label) -%}
+<div class="span-8">
+  <p class="calc-result" id="{{ calc }}-result" aria-live="polite"></p>
+  <div class="calc-stats" id="{{ calc }}-stats"></div>
+  <div class="chart-box"><canvas id="{{ calc }}-chart" role="img" aria-label="{{ chart_label }}"></canvas></div>
+  <p class="chart-summary" id="{{ calc }}-summary"></p>
+</div>
+{%- endmacro %}
+
+<div class="page-head">
+  <div>
+    <h1>Calculators</h1>
+    <p>Play with "what if" numbers for your {{ term('sip', 'SIPs') }} and savings goals. Everything is worked out in your browser; nothing is saved.</p>
+  </div>
+</div>
+
+<div class="stack">
+  <div class="segmented calc-tabs" role="group" aria-label="Choose a calculator" id="calc-tabs">
+    <button type="button" data-tab="sip" aria-pressed="true" aria-controls="calc-sip"><i data-lucide="repeat" aria-hidden="true"></i>SIP</button>
+    <button type="button" data-tab="lump" aria-pressed="false" aria-controls="calc-lump"><i data-lucide="coins" aria-hidden="true"></i>Lump sum</button>
+    <button type="button" data-tab="goal" aria-pressed="false" aria-controls="calc-goal"><i data-lucide="target" aria-hidden="true"></i>Goal planner</button>
+    <button type="button" data-tab="stepup" aria-pressed="false" aria-controls="calc-stepup"><i data-lucide="trending-up" aria-hidden="true"></i>Step-up SIP</button>
+    <button type="button" data-tab="swp" aria-pressed="false" aria-controls="calc-swp"><i data-lucide="hand-coins" aria-hidden="true"></i>Withdrawals (SWP)</button>
+    <button type="button" data-tab="delay" aria-pressed="false" aria-controls="calc-delay"><i data-lucide="hourglass" aria-hidden="true"></i>Cost of delay</button>
+  </div>
+
+  {# ---- SIP ---- #}
+  <section class="panel" id="calc-sip" data-calc="sip" aria-labelledby="sip-h">
+    <h2 id="sip-h">SIP calculator</h2>
+    <p class="calc-intro">A {{ term('sip', 'SIP') }} puts the same amount into a fund every month. See what steady monthly investing might grow to.</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('sip', 'amount', 'Monthly investment', 5000, 100, 1000000, 100, '₹ / month') }}
+        {{ field('sip', 'years', 'For how many years', 10, 1, 40, 1, 'years') }}
+        {{ field('sip', 'rate', 'Assumed return', 12, 0, 30, 0.5, '% a year', 'Long-run equity funds have often been in the 10–14% range; debt funds 6–8%.') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('sip', 'Line chart of money invested and estimated value of a monthly SIP over the years') }}
+    </div>
+  </section>
+
+  {# ---- Lump sum ---- #}
+  <section class="panel" id="calc-lump" data-calc="lump" aria-labelledby="lump-h" hidden>
+    <h2 id="lump-h">Lump-sum calculator</h2>
+    <p class="calc-intro">Invest once and leave it alone. See how one amount might grow with compounding.</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('lump', 'amount', 'One-time investment', 100000, 500, 100000000, 500, '₹') }}
+        {{ field('lump', 'years', 'For how many years', 10, 1, 40, 1, 'years') }}
+        {{ field('lump', 'rate', 'Assumed return', 12, 0, 30, 0.5, '% a year') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('lump', 'Line chart of a one-time investment growing over the years') }}
+    </div>
+  </section>
+
+  {# ---- Goal planner ---- #}
+  <section class="panel" id="calc-goal" data-calc="goal" aria-labelledby="goal-h" hidden>
+    <h2 id="goal-h">Goal planner</h2>
+    <p class="calc-intro">Have a target in mind, like a home deposit or a sabbatical? Work backwards to the monthly SIP that might get you there.</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('goal', 'target', 'Amount you want', 2000000, 10000, 1000000000, 10000, '₹') }}
+        {{ field('goal', 'years', 'In how many years', 8, 1, 40, 1, 'years') }}
+        {{ field('goal', 'rate', 'Assumed return', 12, 0, 30, 0.5, '% a year') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('goal', 'Line chart of the monthly SIP needed growing towards the goal amount') }}
+    </div>
+  </section>
+
+  {# ---- Step-up SIP ---- #}
+  <section class="panel" id="calc-stepup" data-calc="stepup" aria-labelledby="stepup-h" hidden>
+    <h2 id="stepup-h">Step-up SIP</h2>
+    <p class="calc-intro">Raise your SIP a little every year, for example when you get a raise. Compare it with keeping the SIP flat.</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('stepup', 'amount', 'Starting monthly investment', 5000, 100, 1000000, 100, '₹ / month') }}
+        {{ field('stepup', 'step', 'Increase every year by', 10, 0, 50, 1, '%') }}
+        {{ field('stepup', 'years', 'For how many years', 10, 1, 40, 1, 'years') }}
+        {{ field('stepup', 'rate', 'Assumed return', 12, 0, 30, 0.5, '% a year') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('stepup', 'Line chart comparing a step-up SIP with a flat SIP over the years') }}
+    </div>
+  </section>
+
+  {# ---- SWP ---- #}
+  <section class="panel" id="calc-swp" data-calc="swp" aria-labelledby="swp-h" hidden>
+    <h2 id="swp-h">Systematic withdrawal plan (SWP)</h2>
+    <p class="calc-intro">The reverse of a SIP: take out a fixed amount every month from money you've built up, while the rest stays invested. How long would it last?</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('swp', 'corpus', 'Money invested to start with', 2500000, 10000, 1000000000, 10000, '₹') }}
+        {{ field('swp', 'withdrawal', 'Monthly withdrawal', 20000, 100, 10000000, 100, '₹ / month') }}
+        {{ field('swp', 'rate', 'Assumed return', 8, 0, 30, 0.5, '% a year', 'Withdrawal money is usually kept in calmer funds, so a lower return is more realistic.') }}
+        {{ field('swp', 'years', 'Show me', 20, 1, 50, 1, 'years') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('swp', 'Line chart of money left and total withdrawn during a systematic withdrawal plan') }}
+    </div>
+  </section>
+
+  {# ---- Cost of delay ---- #}
+  <section class="panel" id="calc-delay" data-calc="delay" aria-labelledby="delay-h" hidden>
+    <h2 id="delay-h">Cost of delay</h2>
+    <p class="calc-intro">Starting now versus starting a little later, with the same finish line. The gap is the price of waiting.</p>
+    <div class="grid">
+      <form class="span-4 calc-inputs" onsubmit="return false">
+        {{ field('delay', 'amount', 'Monthly investment', 5000, 100, 1000000, 100, '₹ / month') }}
+        {{ field('delay', 'years', 'Years until you need the money', 20, 2, 40, 1, 'years') }}
+        {{ field('delay', 'delay', 'Delay before starting', 1, 1, 10, 1, 'years') }}
+        {{ field('delay', 'rate', 'Assumed return', 12, 0, 30, 0.5, '% a year') }}
+        {{ rate_note() }}
+      </form>
+      {{ output('delay', 'Line chart comparing starting a SIP now with starting it later') }}
+    </div>
+  </section>
+
+  <details class="panel">
+    <summary>How these numbers are worked out</summary>
+    <div style="margin-top:12px" class="small">
+      <p>We turn the yearly return into a monthly one so a year of growth adds up to exactly the rate you typed: monthly rate = (1 + yearly rate)<sup>1/12</sup> − 1. At 12% a year that is about 0.95% a month.</p>
+      <p>SIP instalments go in at the start of each month and grow for that month. The SWP takes the withdrawal out at the start of each month and the rest grows.</p>
+      <p>Real funds don't grow at a steady rate. They rise and fall, and the order of good and bad years matters, especially for withdrawals. These calculators ignore taxes, exit loads and the fund's {{ term('expense ratio', 'expense ratio') }} (which is already inside the NAV of a real fund). Use them to compare ideas, not to plan to the rupee.</p>
+    </div>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const M = window.Mausam;
+
+  // ---------- helpers ----------
+  const monthlyRate = (annualPct) => Math.pow(1 + annualPct / 100, 1 / 12) - 1;
+  function trimNum(x, d) { return Number(x.toFixed(d)).toString(); }
+  // "about ₹11.2 lakh", "₹1.05 crore", "₹45,000"
+  function words(v) {
+    const a = Math.abs(v), sign = v < 0 ? '−' : '';
+    if (a >= 1e7) return `${sign}₹${trimNum(a / 1e7, 2)} crore`;
+    if (a >= 1e5) return `${sign}₹${trimNum(a / 1e5, 1)} lakh`;
+    return M.inr(v);
+  }
+  function axisShort(v) {
+    const a = Math.abs(v);
+    if (a >= 1e7) return '₹' + trimNum(v / 1e7, 1) + ' Cr';
+    if (a >= 1e5) return '₹' + trimNum(v / 1e5, 1) + ' L';
+    if (a >= 1e3) return '₹' + trimNum(v / 1e3, 0) + 'k';
+    return '₹' + Math.round(v);
+  }
+  const yrs = (n) => `${n} ${n === 1 ? 'year' : 'years'}`;
+  const pctTxt = (r) => `${trimNum(r, 2)}%`;
+
+  // Read and validate a number input. Returns null (and marks the field) when invalid.
+  function readInput(calc, name) {
+    const el = document.getElementById(`${calc}-${name}`);
+    const err = document.getElementById(`${calc}-${name}-err`);
+    const v = parseFloat(el.value);
+    const min = parseFloat(el.dataset.min), max = parseFloat(el.dataset.max);
+    let msg = '';
+    if (el.value.trim() === '' || isNaN(v)) msg = 'Please enter a number.';
+    else if (v < min) msg = `Use at least ${min.toLocaleString('en-IN')}.`;
+    else if (v > max) msg = `Use at most ${max.toLocaleString('en-IN')}.`;
+    el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    err.textContent = msg;
+    return msg ? null : v;
+  }
+  function readAll(calc, names) {
+    const out = {}; let okAll = true;
+    names.forEach((n) => { const v = readInput(calc, n); if (v === null) okAll = false; out[n] = v; });
+    return okAll ? out : null;
+  }
+  function showInvalid(calc, text) {
+    const r = document.getElementById(`${calc}-result`);
+    r.classList.add('invalid');
+    r.textContent = text || 'Check the highlighted box above, then the result will update.';
+    document.getElementById(`${calc}-stats`).innerHTML = '';
+    document.getElementById(`${calc}-summary`).textContent = '';
+    M.chart(`${calc}-chart`, { type: 'line', data: { labels: [], datasets: [] } });
+  }
+  function setResult(calc, html, stats, summary) {
+    const r = document.getElementById(`${calc}-result`);
+    r.classList.remove('invalid');
+    r.innerHTML = html;
+    document.getElementById(`${calc}-stats`).innerHTML = stats.map(([label, value, sub]) =>
+      `<div class="stat"><span class="stat-label">${M.esc(label)}</span><span class="stat-value">${M.esc(value)}</span>` +
+      (sub ? `<span class="stat-sub muted small">${M.esc(sub)}</span>` : '') + '</div>').join('');
+    document.getElementById(`${calc}-summary`).textContent = summary;
+  }
+  const b = (s) => `<strong>${M.esc(s)}</strong>`;
+
+  // Monthly SIP simulation (instalment at the start of each month), yearly points.
+  function simulateSip(amount, years, annualPct, stepPct = 0, startYear = 0) {
+    const i = monthlyRate(annualPct);
+    let bal = 0, invested = 0, p = amount;
+    const value = [0], inv = [0];
+    for (let m = 0; m < years * 12; m++) {
+      if (m > 0 && m % 12 === 0 && stepPct) p *= 1 + stepPct / 100;
+      invested += p;
+      bal = (bal + p) * (1 + i);
+      if ((m + 1) % 12 === 0) { value.push(bal); inv.push(invested); }
+    }
+    return { value, invested: inv, final: bal, totalInvested: invested, lastInstalment: p };
+  }
+  function sipFactor(months, annualPct) {
+    const i = monthlyRate(annualPct);
+    return i === 0 ? months : ((Math.pow(1 + i, months) - 1) / i) * (1 + i);
+  }
+
+  // ---------- chart ----------
+  function drawChart(calc, labels, datasets) {
+    const p = M.palette();
+    const colours = { value: p.monsoon, invested: p.slate, compare: p.saffron, target: p.plum };
+    M.chart(`${calc}-chart`, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: datasets.map((d) => {
+          const c = colours[d.kind] || p.monsoon;
+          return {
+            label: d.label, data: d.data, borderColor: c, tension: 0.25, spanGaps: false,
+            fill: d.fill ? 'origin' : false, backgroundColor: d.fill ? M.alpha(c, 0.12) : c,
+            borderDash: d.dash ? [6, 5] : [], stepped: d.stepped || false,
+            borderWidth: d.kind === 'value' ? 2.5 : 2,
+          };
+        }),
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: (ctx) => (ctx.parsed.y === null ? null : `${ctx.dataset.label}: ${M.inr(ctx.parsed.y)}`) } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 11, autoSkip: true } },
+          y: { beginAtZero: true, ticks: { callback: (v) => axisShort(v), maxTicksLimit: 6 } },
+        },
+      },
+    });
+  }
+  const yearLabels = (n, offset = 0) => Array.from({ length: n + 1 }, (_, k) => (k + offset === 0 ? 'Start' : `Year ${k + offset}`));
+
+  // ---------- calculators ----------
+  const CALCS = {
+    sip() {
+      const v = readAll('sip', ['amount', 'years', 'rate']);
+      if (!v) return showInvalid('sip');
+      const years = Math.round(v.years);
+      const s = simulateSip(v.amount, years, v.rate);
+      const gain = s.final - s.totalInvested;
+      setResult('sip',
+        `If you invest ${b(M.inr(v.amount))} a month for ${yrs(years)} at ${pctTxt(v.rate)} a year, you might end up with about ` +
+        `${b(words(s.final))}, of which ${b(words(s.totalInvested))} is your own money.`,
+        [['Estimated value', M.inr(s.final)], ['Your own money', M.inr(s.totalInvested)], ['Estimated growth', M.inr(gain), s.final ? `${Math.round(gain / s.final * 100)}% of the final value` : '']],
+        `Chart: your own money rises steadily to ${M.inr(s.totalInvested)}, while the estimated value curves upwards to ${M.inr(s.final)} by year ${years}. The gap between the lines is growth from compounding.`);
+      drawChart('sip', yearLabels(years), [
+        { label: 'Estimated value', data: s.value, kind: 'value', fill: true },
+        { label: 'Your own money', data: s.invested, kind: 'invested' },
+      ]);
+    },
+
+    lump() {
+      const v = readAll('lump', ['amount', 'years', 'rate']);
+      if (!v) return showInvalid('lump');
+      const years = Math.round(v.years);
+      const series = Array.from({ length: years + 1 }, (_, y) => v.amount * Math.pow(1 + v.rate / 100, y));
+      const fin = series[years];
+      const multiple = fin / v.amount;
+      setResult('lump',
+        `If you invest ${b(M.inr(v.amount))} once and leave it for ${yrs(years)} at ${pctTxt(v.rate)} a year, it might grow to about ` +
+        `${b(words(fin))}. That's about ${b(trimNum(multiple, 1) + ' times')} what you put in.`,
+        [['Estimated value', M.inr(fin)], ['Your own money', M.inr(v.amount)], ['Estimated growth', M.inr(fin - v.amount)]],
+        `Chart: your one-time ${M.inr(v.amount)} stays flat as a line while its estimated value grows to ${M.inr(fin)} by year ${years}. Growth speeds up in later years because returns earn returns.`);
+      drawChart('lump', yearLabels(years), [
+        { label: 'Estimated value', data: series, kind: 'value', fill: true },
+        { label: 'Your own money', data: series.map(() => v.amount), kind: 'invested' },
+      ]);
+    },
+
+    goal() {
+      const v = readAll('goal', ['target', 'years', 'rate']);
+      if (!v) return showInvalid('goal');
+      const years = Math.round(v.years);
+      const need = v.target / sipFactor(years * 12, v.rate);
+      const s = simulateSip(need, years, v.rate);
+      setResult('goal',
+        `To reach about ${b(words(v.target))} in ${yrs(years)} at ${pctTxt(v.rate)} a year, you might need to invest about ` +
+        `${b(M.inr(Math.ceil(need / 10) * 10))} a month. Of the final amount, ${b(words(s.totalInvested))} would be your own money.`,
+        [['Monthly SIP needed', M.inr(Math.ceil(need / 10) * 10)], ['Your own money', M.inr(s.totalInvested)], ['Estimated growth', M.inr(v.target - s.totalInvested)]],
+        `Chart: a monthly SIP of about ${M.inr(need)} grows towards the dashed goal line of ${M.inr(v.target)}, reaching it in year ${years}.`);
+      drawChart('goal', yearLabels(years), [
+        { label: 'Estimated value', data: s.value, kind: 'value', fill: true },
+        { label: 'Your own money', data: s.invested, kind: 'invested' },
+        { label: 'Your goal', data: s.value.map(() => v.target), kind: 'target', dash: true },
+      ]);
+    },
+
+    stepup() {
+      const v = readAll('stepup', ['amount', 'step', 'years', 'rate']);
+      if (!v) return showInvalid('stepup');
+      const years = Math.round(v.years);
+      const up = simulateSip(v.amount, years, v.rate, v.step);
+      const flat = simulateSip(v.amount, years, v.rate, 0);
+      const extra = up.final - flat.final;
+      setResult('stepup',
+        `If you start with ${b(M.inr(v.amount))} a month and raise it by ${pctTxt(v.step)} every year for ${yrs(years)} at ${pctTxt(v.rate)} a year, ` +
+        `you might end up with about ${b(words(up.final))}, of which ${b(words(up.totalInvested))} is your own money. ` +
+        `Keeping the SIP flat would give about ${b(words(flat.final))}.`,
+        [['With step-up', M.inr(up.final)], ['Flat SIP', M.inr(flat.final)], ['Difference', M.inr(extra), `Last instalment ${M.inr(up.lastInstalment)} a month`]],
+        `Chart: the step-up SIP's estimated value reaches ${M.inr(up.final)} by year ${years}, against ${M.inr(flat.final)} for a flat SIP of ${M.inr(v.amount)}. Your own money with step-up totals ${M.inr(up.totalInvested)}.`);
+      drawChart('stepup', yearLabels(years), [
+        { label: 'Step-up SIP value', data: up.value, kind: 'value', fill: true },
+        { label: 'Flat SIP value', data: flat.value, kind: 'compare' },
+        { label: 'Your own money (step-up)', data: up.invested, kind: 'invested', dash: true },
+      ]);
+    },
+
+    swp() {
+      const v = readAll('swp', ['corpus', 'withdrawal', 'rate', 'years']);
+      if (!v) return showInvalid('swp');
+      const years = Math.round(v.years);
+      const i = monthlyRate(v.rate);
+      let bal = v.corpus, withdrawn = 0, lastedMonths = null;
+      const balance = [bal], taken = [0];
+      // Simulate up to 100 years to find when (if ever) the money runs out.
+      for (let m = 0; m < 1200; m++) {
+        if (bal <= 0.5) { lastedMonths = m; break; }
+        const w = Math.min(v.withdrawal, bal);
+        bal = (bal - w) * (1 + i); withdrawn += w;
+        if (m < years * 12 && (m + 1) % 12 === 0) { balance.push(Math.max(bal, 0)); taken.push(withdrawn); }
+      }
+      // If the money ran out before the chosen horizon, fill the remaining years with "nothing left".
+      while (balance.length < years + 1) { balance.push(0); taken.push(withdrawn); }
+      const endBal = balance[years];
+      const endTaken = taken[years];
+      let text;
+      if (lastedMonths !== null && lastedMonths <= years * 12) {
+        const y = Math.floor(lastedMonths / 12), mo = lastedMonths % 12;
+        text = `Taking ${b(M.inr(v.withdrawal))} a month from ${b(words(v.corpus))} at ${pctTxt(v.rate)} a year, the money might last about ` +
+          `${b((y ? yrs(y) : '') + (y && mo ? ' and ' : '') + (mo ? `${mo} month${mo === 1 ? '' : 's'}` : ''))}. In total you would take out about ${b(words(endTaken))}.`;
+      } else {
+        text = `Taking ${b(M.inr(v.withdrawal))} a month from ${b(words(v.corpus))} at ${pctTxt(v.rate)} a year, after ${yrs(years)} you might have taken out ` +
+          `about ${b(words(endTaken))} and still have about ${b(words(endBal))} left.`;
+        if (lastedMonths === null) text += ' At this rate, growth keeps up with your withdrawals, so the money might not run out.';
+        else text += ` It might run out after about ${yrs(Math.floor(lastedMonths / 12))}.`;
+      }
+      setResult('swp', text,
+        [['Money left after ' + yrs(years), M.inr(endBal)], ['Total withdrawn', M.inr(endTaken)],
+         ['Withdrawal rate', `${trimNum(v.withdrawal * 12 / v.corpus * 100, 1)}% a year`, 'of the starting amount']],
+        `Chart: money left starts at ${M.inr(v.corpus)} and ends at ${M.inr(endBal)} after ${yrs(years)}, while total withdrawals climb to ${M.inr(endTaken)}.`);
+      drawChart('swp', yearLabels(balance.length - 1), [
+        { label: 'Money left', data: balance, kind: 'value', fill: true },
+        { label: 'Total withdrawn', data: taken, kind: 'compare' },
+      ]);
+    },
+
+    delay() {
+      const v = readAll('delay', ['amount', 'years', 'delay', 'rate']);
+      if (!v) return showInvalid('delay');
+      const years = Math.round(v.years), delayY = Math.round(v.delay);
+      if (delayY >= years) {
+        const el = document.getElementById('delay-delay');
+        el.setAttribute('aria-invalid', 'true');
+        document.getElementById('delay-delay-err').textContent = 'The delay must be shorter than the time until you need the money.';
+        return showInvalid('delay');
+      }
+      const now = simulateSip(v.amount, years, v.rate);
+      const later = simulateSip(v.amount, years - delayY, v.rate);
+      const laterSeries = Array.from({ length: years + 1 }, (_, y) => (y < delayY ? null : later.value[y - delayY]));
+      const cost = now.final - later.final;
+      const catchUp = v.amount * now.final / later.final;
+      setResult('delay',
+        `Investing ${b(M.inr(v.amount))} a month, starting now could grow to about ${b(words(now.final))} in ${yrs(years)}. ` +
+        `Starting ${delayY === 1 ? 'one year' : yrs(delayY)} later, with the same finish line, might give about ${b(words(later.final))}: ` +
+        `about ${b(words(cost))} less. To catch up, you would need about ${b(M.inr(Math.ceil(catchUp / 10) * 10))} a month instead.`,
+        [['Start now', M.inr(now.final)], [`Start ${yrs(delayY)} later`, M.inr(later.final)],
+         ['Cost of waiting', M.inr(cost), `You'd invest ${M.inr(now.totalInvested - later.totalInvested)} less of your own money`]],
+        `Chart: starting now reaches ${M.inr(now.final)} by year ${years}; starting in year ${delayY} reaches ${M.inr(later.final)}. Most of the gap comes from the final years of compounding that the late start misses.`);
+      drawChart('delay', yearLabels(years), [
+        { label: 'Start now', data: now.value, kind: 'value', fill: true },
+        { label: `Start after ${yrs(delayY)}`, data: laterSeries, kind: 'compare' },
+      ]);
+    },
+  };
+
+  // ---------- tabs ----------
+  const tabs = M.$$('#calc-tabs button');
+  let current = 'sip';
+  function show(name, focus) {
+    if (!CALCS[name]) name = 'sip';
+    current = name;
+    tabs.forEach((t) => t.setAttribute('aria-pressed', String(t.dataset.tab === name)));
+    M.$$('section[data-calc]').forEach((s) => { s.hidden = s.dataset.calc !== name; });
+    CALCS[name]();
+    if (focus) document.getElementById(`${name}-h`).focus({ preventScroll: true });
+    try { history.replaceState(null, '', '#' + name); } catch (e) { /* ignore */ }
+  }
+  tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
+  M.$$('section[data-calc] h2').forEach((h) => h.setAttribute('tabindex', '-1'));
+
+  let pending = null;
+  M.$$('section[data-calc] input').forEach((inp) => {
+    inp.addEventListener('input', () => {
+      const calc = inp.closest('section').dataset.calc;
+      if (pending) cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => { pending = null; CALCS[calc](); });
+    });
+  });
+  document.addEventListener('mausam:theme', () => CALCS[current]());
+
+  show((location.hash || '#sip').slice(1));
+})();
+</script>
+{% endblock %}

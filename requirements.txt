@@ -1,0 +1,9 @@
+# Vercel (serverless) dependencies only. Keep this small: no pandas/numpy/statsmodels/sklearn here.
+flask==3.0.3
+psycopg[binary]==3.2.3
+httpx==0.27.2
+# AMFI serves a chain ending at Sectigo Root R46, only in recent CA bundles
+certifi>=2025.1.31
+feedparser==6.0.11
+python-dateutil==2.9.0.post0
+markdown==3.7

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Mausam{% endblock %} · Mausam</title>
+  <meta name="description" content="Mausam: a plain-language weekly weather report on your mutual funds.">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <script>
+    (function () {
+      try { var t = localStorage.getItem('mausam-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+      try { if (localStorage.getItem('mausam-sidebar') === 'collapsed') document.documentElement.classList.add('sidebar-collapsed'); } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=1">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="shell" id="shell">
+  <nav class="sidebar" aria-label="Main">
+    <a class="brand" href="/">
+      {% include "partials/logo.html" %}
+      <span class="brand-text"><span class="brand-name">Mausam</span><span class="brand-sub">your money weather</span></span>
+    </a>
+    {% for item in NAV %}
+      {% if loop.index0 in (3, 8, 13) %}<div class="nav-sep" role="separator"></div>{% endif %}
+      <a class="nav-link" href="{{ item.href }}" {% if (item.href == '/' and current_path == '/') or (item.href != '/' and current_path.startswith(item.href)) %}aria-current="page"{% endif %} title="{{ item.label }}">
+        <i data-lucide="{{ item.icon }}" aria-hidden="true"></i><span class="nav-label">{{ item.label }}</span>
+      </a>
+    {% endfor %}
+    <button class="nav-link btn-ghost collapse-btn" type="button" id="collapse-btn" aria-label="Collapse sidebar" style="border:0;background:none;cursor:pointer;font:inherit">
+      <i data-lucide="panel-left-close" aria-hidden="true"></i><span class="nav-label">Collapse</span>
+    </button>
+  </nav>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="page-title">{% block page_title %}{{ self.title() }}{% endblock %}</span>
+      <span class="freshness" title="NAVs are published once a day after markets close. They are not live prices.">
+        <span class="dot {% if fresh %}fresh{% elif fresh is not none %}stale{% endif %}" aria-hidden="true"></span>
+        {% if data_as_of %}
+          <span><span class="label-long">Data as of </span>{{ data_as_of|d }}</span>
+          <span class="sr-only">{{ 'Data is fresh' if fresh else 'Data may be out of date' }}</span>
+        {% else %}<span>No data yet</span>{% endif %}
+      </span>
+      <a class="icon-btn" href="/alerts" aria-label="Alerts{% if unread_alerts %}, {{ unread_alerts }} unread{% endif %}">
+        <i data-lucide="bell" aria-hidden="true"></i>
+        {% if unread_alerts %}<span class="badge-count">{{ unread_alerts if unread_alerts < 100 else '99+' }}</span>{% endif %}
+      </a>
+      <button class="icon-btn" type="button" id="theme-btn" aria-label="Switch dark or light mode">
+        <i data-lucide="moon" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <main id="main" class="content" tabindex="-1">
+      {% block content %}{% endblock %}
+      <p class="disclaimer" style="margin-top:40px">Mausam is an educational tool, not investment advice. Mutual fund investments are subject to market risks. NAVs from mfapi.in are published once per business day; they are not real-time.</p>
+    </main>
+  </div>
+</div>
+
+<nav class="tabbar" aria-label="Main (mobile)">
+  {% for item in NAV if item.mobile %}
+    <a href="{{ item.href }}" {% if (item.href == '/' and current_path == '/') or (item.href != '/' and current_path.startswith(item.href)) %}aria-current="page"{% endif %}>
+      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label.split(' ')[0] }}
+    </a>
+  {% endfor %}
+  <button type="button" id="more-btn" aria-haspopup="dialog" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i>More</button>
+</nav>
+<div id="more-sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet" role="dialog" aria-label="More pages">
+    {% for item in NAV if not item.mobile %}
+      <a href="{{ item.href }}"><i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="toast-host" id="toasts" role="status" aria-live="polite"></div>
+<dialog id="confirm-dialog">
+  <h3 id="confirm-title">Are you sure?</h3>
+  <p id="confirm-body" class="muted"></p>
+  <div class="row" style="justify-content:flex-end">
+    <button class="btn" value="cancel" id="confirm-cancel" type="button">Cancel</button>
+    <button class="btn btn-danger" id="confirm-ok" type="button">Confirm</button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+<script src="{{ url_for('static', filename='js/mausam.js') }}?v=1"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Trends{% endblock %}
+
+{% block head %}
+<style>
+  .heat-scroll { overflow-x: auto; padding-bottom: 6px; }
+  .heatmap .colhead { font-size: 11px; color: var(--slate); text-align: center; white-space: nowrap; align-self: end; padding-bottom: 2px; }
+  .heatmap .cell { cursor: default; font-size: 10px; line-height: 1; }
+  .heatmap .cell.none { background: var(--surface-2); color: var(--slate); }
+  .heatmap .rowlabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .heatmap .rowlabel span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .heat-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--slate); margin-top: 12px; }
+  .heat-legend .scale { display: flex; height: 12px; width: 180px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  .heat-legend .scale span { flex: 1; }
+  .timeline { display: flex; gap: 4px; overflow-x: auto; padding: 4px 2px 8px; }
+  .tl-week { flex: 1 0 44px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; border-radius: var(--r-sm); text-decoration: none; color: var(--ink); font-size: 11px; border: 1px solid transparent; }
+  a.tl-week:hover { border-color: var(--line); background: var(--surface-2); }
+  .tl-week svg { width: 22px; height: 22px; }
+  .tl-week.clear svg { color: var(--saffron); }
+  .tl-week.clouds svg { color: var(--slate); }
+  .tl-week.storm svg { color: var(--plum); }
+  .tl-week.unknown { color: var(--slate); }
+  .tl-week.unknown svg { color: var(--line); }
+  .tl-week .tl-date { color: var(--slate); white-space: nowrap; }
+  .tl-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--slate); margin-top: 8px; }
+  .tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .tl-legend svg { width: 16px; height: 16px; }
+  details.alt { margin-top: 14px; }
+  details.alt table { font-size: 13px; }
+  details.alt td, details.alt th { padding: 6px 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set weeks = trends.weeks or [] %}
+{% set funds = trends.funds or [] %}
+<div class="stack">
+  <div class="page-head">
+    <div>
+      <h1>Trends over the weeks</h1>
+      <p>One week can be noise. Here you can see whether a fund keeps falling behind, or just had a bad week.</p>
+    </div>
+  </div>
+
+  {% if weeks|length < 2 or not funds %}
+    <div class="panel">{{ m.empty('activity', 'Trends need at least two weeks', 'Mausam takes a snapshot of your funds every Saturday. Come back after the next one, or open your weekly reports.', '/reports', 'See weekly reports') }}</div>
+  {% else %}
+
+  {# ---------- Heatmap ---------- #}
+  {% set n = weeks|length %}
+  <section class="panel" aria-labelledby="heat-h">
+    <div class="panel-head">
+      <h2 id="heat-h">Weekly gap vs {{ term('benchmark', 'benchmark') }}</h2>
+      <span class="small muted">last {{ n }} weeks · hover a square for the number</span>
+    </div>
+    <div class="heat-scroll">
+      <div class="heatmap" aria-hidden="true" style="grid-template-columns: minmax(110px, 170px) repeat({{ n }}, minmax(24px, 1fr)); min-width: {{ 120 + n * 28 }}px">
+        <div></div>
+        {% for w in weeks %}
+          <div class="colhead">{% if loop.index0 % 4 == 0 or loop.last %}{{ w|d('short') }}{% endif %}</div>
+        {% endfor %}
+        {% for f in funds %}
+          {% set ref = 'category average' if f.asset_class == 'debt' else 'benchmark' %}
+          <div class="rowlabel"><span class="swatch" style="background:{{ f.colour or 'var(--monsoon)' }}"></span><span>{{ f.name }}</span></div>
+          {% for w in weeks %}
+            {% set c = f.weeks.get(w) %}
+            {% if c and c.gap is not none %}
+              {% set strength = [c.gap|abs / 2.5, 1]|min %}
+              {% set mix = (12 + strength * 70)|round|int %}
+              {% set tip = f.name ~ ', week ending ' ~ (w|d) ~ ': ' ~ ('ahead of' if c.gap >= 0 else 'behind') ~ ' its ' ~ ref ~ ' by ' ~ ('%.2f'|format(c.gap|abs)) ~ ' pts' ~ ((' (fund ' ~ ('%+.2f'|format(c.ret)) ~ '%, ' ~ ref ~ ' ' ~ ('%+.2f'|format(c.ref)) ~ '%)') if (c.ret is not none and c.ref is not none) else '') ~ '. ' ~ (c.attribution|attribution) ~ '.' %}
+              <div class="cell" data-tip="{{ tip }}" style="background: color-mix(in srgb, var(--{{ 'gain' if c.gap >= 0 else 'loss' }}) {{ mix }}%, var(--surface)); color: {{ 'var(--surface)' if mix > 50 else 'var(--ink)' }}">{{ '▲' if c.gap >= 0 else '▼' }}</div>
+            {% else %}
+              <div class="cell none" data-tip="{{ f.name }}, week ending {{ w|d }}: no figure this week">·</div>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="heat-legend" aria-hidden="true">
+      <span>▼ Behind</span>
+      <span class="scale">
+        {% for p in [80, 55, 30, 12] %}<span style="background: color-mix(in srgb, var(--loss) {{ p }}%, var(--surface))"></span>{% endfor %}
+        {% for p in [12, 30, 55, 80] %}<span style="background: color-mix(in srgb, var(--gain) {{ p }}%, var(--surface))"></span>{% endfor %}
+      </span>
+      <span>Ahead ▲</span>
+      <span>· Deeper colour = bigger gap (2.5 {{ 'pts' }} or more is darkest)</span>
+    </div>
+    <p class="chart-summary">Each square is one week. Green ▲ means the fund did better than the market it's compared with; red ▼ means it did worse. Debt funds are compared with their {{ term('category average', 'category average') }}.</p>
+
+    <details class="alt">
+      <summary>See these numbers as a table</summary>
+      <div class="table-wrap" style="margin-top:10px">
+        <table>
+          <caption class="sr-only">Weekly gap versus benchmark in points, for each fund and week</caption>
+          <thead><tr><th scope="col">Week ending</th>{% for f in funds %}<th scope="col" class="num">{{ f.name }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for w in weeks|reverse %}
+            <tr>
+              <th scope="row" style="font-weight:500;color:var(--ink);border-bottom:1px solid var(--line)">{{ w|d }}</th>
+              {% for f in funds %}{% set c = f.weeks.get(w) %}<td class="num">{{ (c.gap if c else none)|pts }}</td>{% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  {# ---------- Verdict timeline ---------- #}
+  {% set vc = namespace(clear=0, clouds=0, storm=0, total=0) %}
+  <section class="panel" aria-labelledby="tl-h">
+    <div class="panel-head"><h2 id="tl-h">Your weekly weather</h2><a class="small" href="/reports">All reports</a></div>
+    <ol class="timeline" style="list-style:none;margin:0">
+      {% for w in weeks %}
+        {% set v = trends.verdicts.get(w) %}
+        {% set wx = weather(v) %}
+        {% if v %}{% set vc.total = vc.total + 1 %}{% if wx.key == 'clear' %}{% set vc.clear = vc.clear + 1 %}{% elif wx.key == 'clouds' %}{% set vc.clouds = vc.clouds + 1 %}{% elif wx.key == 'storm' %}{% set vc.storm = vc.storm + 1 %}{% endif %}{% endif %}
+        <li style="display:contents">
+          {% if v %}
+          <a class="tl-week {{ wx.key }}" href="/reports/{{ w }}" data-tip="Week ending {{ w|d }}: {{ wx.label }}. {{ v }}." aria-label="Week ending {{ w|d }}: {{ wx.label }}, {{ v }}. Open report.">
+            <i data-lucide="{{ wx.icon }}" aria-hidden="true"></i><span class="tl-date">{{ w|d('short') }}</span>
+          </a>
+          {% else %}
+          <span class="tl-week unknown" data-tip="Week ending {{ w|d }}: no report">
+            <i data-lucide="minus" aria-hidden="true"></i><span class="tl-date">{{ w|d('short') }}</span><span class="sr-only">: no report</span>
+          </span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+    <div class="tl-legend" aria-hidden="true">
+      <span><i data-lucide="sun" style="color:var(--saffron)"></i>Clear skies: no action needed</span>
+      <span><i data-lucide="cloud" style="color:var(--slate)"></i>Passing clouds: one fund worth watching</span>
+      <span><i data-lucide="cloud-rain" style="color:var(--plum)"></i>Storm watch: consider reviewing</span>
+    </div>
+    <p class="chart-summary">
+      {% if vc.total %}
+        Out of {{ vc.total }} weekly report{{ 's' if vc.total != 1 }}: clear skies {{ vc.clear }}, passing clouds {{ vc.clouds }}, storm watch {{ vc.storm }}.
+      {% else %}
+        No weekly reports in this period yet. Each Saturday's report adds a weather icon here.
+      {% endif %}
+    </p>
+  </section>
+
+  {# ---------- Cumulative gap + attribution ---------- #}
+  <div class="grid">
+    <section class="panel span-7" aria-labelledby="cum-h">
+      <div class="panel-head"><h2 id="cum-h">Adding up the weekly gaps</h2><span class="small muted">in {{ term('points', 'points') }}</span></div>
+      <div class="chart-box"><canvas id="cum-chart" role="img" aria-label="Line chart of each fund's weekly gaps versus its benchmark, added up week after week"></canvas></div>
+      <p class="chart-summary" id="cum-sum"></p>
+    </section>
+    <section class="panel span-5" aria-labelledby="mix-h">
+      <div class="panel-head"><h2 id="mix-h">Market or the fund?</h2></div>
+      <div class="chart-box"><canvas id="mix-chart" role="img" aria-label="Stacked bar chart of the share of weeks each fund moved with the market versus on its own"></canvas></div>
+      <p class="chart-summary" id="mix-sum"></p>
+      <p class="small muted" style="margin:0">{{ term('attribution', 'What this means') }}: "with the market" weeks are usually nothing to worry about. Many "fund-specific" weeks deserve a closer look.</p>
+    </section>
+  </div>
+
+  {# ---------- Portfolio value ---------- #}
+  <section class="panel" aria-labelledby="val-h">
+    <div class="panel-head"><h2 id="val-h">Portfolio value, week by week</h2></div>
+    <div class="chart-box sm"><canvas id="val-chart" role="img" aria-label="Line chart of your total portfolio value at the end of each week"></canvas></div>
+    <p class="chart-summary" id="val-sum"></p>
+  </section>
+
+  {% set tf = [] %}
+  {% for f in funds %}{% set _ = tf.append({'name': f.name, 'colour': f.colour, 'cum': f.cumulative_gap, 'mix': f.attribution_mix}) %}{% endfor %}
+  {{ m.json_data('tr-weeks', weeks) }}
+  {{ m.json_data('tr-funds', tf) }}
+  {{ m.json_data('tr-value', trends.portfolio_value or []) }}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const weeks = Mausam.data('tr-weeks');
+  if (!weeks || weeks.length < 2) return;
+  const funds = Mausam.data('tr-funds') || [];
+  const values = Mausam.data('tr-value') || [];
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  const short = (v) => (Math.abs(v) >= 1e5 ? '₹' + (v / 1e5).toFixed(1) + ' L' : Mausam.inr(v));
+
+  function render() {
+    const P = Mausam.palette();
+    funds.forEach((f, i) => { f.c = f.colour || P.fund[i % P.fund.length]; });
+
+    // Cumulative gap
+    Mausam.chart('cum-chart', {
+      type: 'line',
+      data: { datasets: funds.map((f) => ({ label: f.name, data: weeks.map((w, i) => ({ x: w, y: f.cum[i] })), borderColor: f.c, backgroundColor: f.c, fill: false, tension: 0.2, pointRadius: 2 })) },
+      options: { interaction: { mode: 'index', intersect: false },
+        scales: { x: Mausam.timeScale(), y: { ticks: { callback: (v) => (v > 0 ? '+' : '') + v + ' pts' }, grid: { color: (ctx) => ctx.tick.value === 0 ? P.slate : P.line } } },
+        plugins: { legend: { position: 'top', align: 'start' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Mausam.pts(c.raw.y)}` } } } },
+    });
+    const ends = funds.map((f) => ({ f, v: f.cum[f.cum.length - 1] || 0 })).sort((a, b) => b.v - a.v);
+    if (ends.length) {
+      const top = ends[0], bot = ends[ends.length - 1];
+      let s = `Over these ${weeks.length} weeks, ${top.f.name} ${top.v >= 0 ? 'got ahead of' : 'fell behind'} its benchmark by a total of ${Math.abs(top.v).toFixed(2)} points.`;
+      if (ends.length > 1 && bot.v < 0) s += ` ${bot.f.name} fell furthest behind: ${Math.abs(bot.v).toFixed(2)} points in total.`;
+      s += ' A line that keeps sliding down means a fund is steadily trailing, not just having one bad week.';
+      set('cum-sum', s);
+    }
+
+    // Attribution mix (share of weeks)
+    const cats = [
+      { key: 'market_wide', label: 'With the market', colour: P.monsoon },
+      { key: 'mixed', label: 'Partly both', colour: P.slate },
+      { key: 'fund_specific', label: 'Fund-specific', colour: P.saffron },
+      { key: 'insufficient_data', label: 'Not enough data', colour: P.line },
+    ];
+    const totals = funds.map((f) => cats.reduce((s, c) => s + ((f.mix || {})[c.key] || 0), 0));
+    Mausam.chart('mix-chart', {
+      type: 'bar',
+      data: { labels: funds.map((f) => f.name), datasets: cats.map((c) => ({ label: c.label, backgroundColor: c.colour, borderColor: P.surface, borderWidth: 1,
+        data: funds.map((f, i) => totals[i] ? Math.round(((f.mix || {})[c.key] || 0) / totals[i] * 1000) / 10 : 0) })) },
+      options: { indexAxis: 'y', scales: { x: { stacked: true, max: 100, ticks: { callback: (v) => v + '%' } }, y: { stacked: true, grid: { display: false } } },
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => {
+          const n = (funds[c.dataIndex].mix || {})[cats[c.datasetIndex].key] || 0;
+          return `${c.dataset.label}: ${n} of ${totals[c.dataIndex]} weeks (${c.raw}%)`;
+        } } } } },
+    });
+    const withShare = funds.map((f, i) => ({ f, fs: (f.mix || {}).fund_specific || 0, t: totals[i] })).filter((x) => x.t);
+    if (withShare.length) {
+      const most = withShare.slice().sort((a, b) => b.fs / b.t - a.fs / a.t)[0];
+      set('mix-sum', most.fs
+        ? `${most.f.name} had the most fund-specific weeks: ${most.fs} of ${most.t}. The rest of the time, moves mostly came from the market.`
+        : 'Every fund moved mostly with its market. No fund-specific surprises.');
+    }
+
+    // Portfolio value
+    Mausam.chart('val-chart', {
+      type: 'line',
+      data: { datasets: [{ label: 'Portfolio value', data: weeks.map((w, i) => ({ x: w, y: values[i] })), borderColor: P.monsoon,
+        backgroundColor: Mausam.alpha(P.monsoon, 0.12), fill: 'origin', tension: 0.25, pointRadius: 2 }] },
+      options: { scales: { x: Mausam.timeScale(), y: { beginAtZero: false, ticks: { callback: (v) => short(v) } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => Mausam.inr(c.raw.y) } } } },
+    });
+    const firstIdx = values.findIndex((v) => v > 0);
+    if (firstIdx >= 0 && values.length) {
+      const a = values[firstIdx], b = values[values.length - 1];
+      const ch = a ? (b / a - 1) * 100 : 0;
+      set('val-sum', `From ${Mausam.date(weeks[firstIdx])} to ${Mausam.date(weeks[weeks.length - 1])}, your portfolio went from ${Mausam.inr(a)} to ${Mausam.inr(b)} (${Mausam.pct(ch, 1, false)}). This includes new money you put in, so it isn't the same as your return.`);
+    }
+  }
+  render();
+  document.addEventListener('mausam:theme', render);
+})();
+</script>
+{% endblock %}

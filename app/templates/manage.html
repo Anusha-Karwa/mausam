@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Manage funds{% endblock %}
+
+{% block head %}
+<style>
+  .search-wrap { position: relative; }
+  .results { list-style: none; margin: 6px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface);
+    box-shadow: var(--shadow); max-height: 320px; overflow-y: auto; }
+  .results li button { display: flex; width: 100%; text-align: left; gap: 10px; align-items: flex-start; justify-content: space-between;
+    padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: var(--ink); font: 14px var(--font-body); cursor: pointer; }
+  .results li button:hover, .results li button:focus-visible { background: var(--surface-2); }
+  .results .code { font-variant-numeric: tabular-nums; color: var(--slate); font-size: 12px; white-space: nowrap; }
+  .results .status { padding: 8px 10px; font-size: 13px; color: var(--slate); }
+  .or-sep { display: flex; align-items: center; gap: 10px; color: var(--slate); font-size: 13px; margin: 6px 0 12px; }
+  .or-sep::before, .or-sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .code-row { display: flex; gap: 8px; }
+  .code-row input { flex: 1; min-width: 0; }
+  .pv { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; background: var(--surface-2); }
+  .pv h3 { margin: 0 0 4px; font-size: 16px; }
+  .pv dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 14px; }
+  .pv dt { color: var(--slate); }
+  .pv dd { margin: 0; }
+  .pv.ok { border-color: color-mix(in srgb, var(--monsoon) 40%, var(--line)); }
+  .pv.bad { border-color: color-mix(in srgb, var(--loss) 40%, var(--line)); background: var(--loss-soft); }
+  .fund-list { display: grid; gap: 14px; }
+  .fund-card { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px 18px; position: relative; background: var(--surface); }
+  .fund-card::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 3px 3px 0; background: var(--fund, var(--monsoon)); }
+  .fund-card .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .fund-card h3 { margin: 0; font-size: 17px; }
+  .fund-card .full { font-size: 13px; color: var(--slate); margin: 2px 0 0; }
+  .fund-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 18px; margin-top: 12px; font-size: 14px; }
+  .fund-facts .k { display: block; font-size: 12px; color: var(--slate); }
+  .fund-card .edit { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+  .fund-card.removed { opacity: .72; background: var(--surface-2); box-shadow: none; }
+  .fund-card.removed::before { background: var(--line); }
+  .alloc-row { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: 14px; margin-bottom: 8px; }
+  .alloc-bar { height: 10px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .alloc-bar span { display: block; height: 100%; background: var(--monsoon); }
+  .progress-note { margin-top: 12px; }
+  @media (max-width: 560px) { .pv dl { grid-template-columns: 1fr; gap: 0; } .pv dd { margin-bottom: 8px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set active = funds|selectattr('is_active')|list %}
+{% set removed = funds|rejectattr('is_active')|list %}
+
+<div class="page-head">
+  <div>
+    <h1>Manage funds</h1>
+    <p>Add a fund by its name or scheme code. Mausam fetches its full history, picks a fair {{ term('benchmark', 'benchmark') }} and starts tracking it straight away.</p>
+  </div>
+</div>
+
+<div class="grid">
+  {# ---------- Add a fund ---------- #}
+  <section class="panel span-7" aria-labelledby="add-h" id="add">
+    <div class="panel-head"><h2 id="add-h">Add a fund</h2></div>
+    <form id="add-form" novalidate autocomplete="off">
+      <div class="field search-wrap">
+        <label for="s-q">Type a fund name</label>
+        <input type="search" id="s-q" placeholder="e.g. Parag Parikh Flexi Cap" aria-controls="s-results" aria-describedby="s-hint">
+        <p class="hint" id="s-hint">At least 3 letters. Direct Plan - Growth versions are listed first.</p>
+        <ul class="results" id="s-results" hidden aria-label="Search results"></ul>
+      </div>
+      <div class="or-sep">or</div>
+      <div class="field">
+        <label for="a-code">Scheme code</label>
+        <div class="code-row">
+          <input type="text" id="a-code" inputmode="numeric" pattern="[0-9]*" maxlength="7" placeholder="e.g. 122639" aria-describedby="code-hint">
+          <button class="btn" type="button" id="a-lookup">Look up</button>
+        </div>
+        <p class="hint" id="code-hint">A scheme code is a number, usually 6 digits.</p>
+      </div>
+
+      <div id="a-preview" aria-live="polite" style="margin-bottom:16px"></div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="a-name">Friendly name</label>
+          <input type="text" id="a-name" maxlength="60" placeholder="e.g. Mid-cap fund">
+          <p class="hint">What Mausam calls it on your pages.</p>
+        </div>
+        <div class="field">
+          <label for="a-bench">{{ term('benchmark', 'Benchmark') }}</label>
+          <select id="a-bench">
+            <option value="">Automatic</option>
+            {% for k in benchmark_choices %}<option value="{{ k }}">{{ BENCHMARK_LABELS.get(k, k) }}</option>{% endfor %}
+          </select>
+          <p class="hint">Leave on automatic unless you know better.</p>
+        </div>
+        <div class="field">
+          <label for="a-sip">{{ term('sip', 'SIP') }} amount (₹) <span class="muted" style="font-weight:400">(optional)</span></label>
+          <input type="number" id="a-sip" min="0" step="100" inputmode="decimal" placeholder="e.g. 5000">
+        </div>
+        <div class="field">
+          <label for="a-day">SIP day of month <span class="muted" style="font-weight:400">(1 to 28)</span></label>
+          <input type="number" id="a-day" min="1" max="28" step="1" inputmode="numeric" placeholder="e.g. 5">
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" type="submit" id="a-add" disabled><i data-lucide="plus" aria-hidden="true"></i>Add fund</button>
+        <span class="small muted" id="a-add-hint">Look up a fund first.</span>
+      </div>
+      <div class="notice progress-note" id="a-progress" hidden role="status">
+        <i data-lucide="loader" aria-hidden="true"></i>
+        <div><strong>Fetching full NAV history and rebuilding 26 weeks… this can take up to a minute.</strong><br>
+          <span class="small muted">Mausam is also finding similar funds for the category average. Please keep this page open. <span id="a-elapsed"></span></span></div>
+      </div>
+    </form>
+  </section>
+
+  {# ---------- Help + allocation ---------- #}
+  <div class="span-5 stack" style="align-content:start">
+    <section class="panel" aria-labelledby="help-h">
+      <h2 id="help-h" style="font-size:17px">How to find a scheme code</h2>
+      <ol style="padding-left:20px;margin:0 0 10px;font-size:14px">
+        <li style="margin-bottom:6px">Easiest: type the fund's name in the search box. Mausam asks mfapi.in for you.</li>
+        <li style="margin-bottom:6px">Or search on <a href="https://www.mfapi.in/" target="_blank" rel="noopener">mfapi.in</a>. The number in each result is the scheme code.</li>
+        <li>Or look the fund up on the <a href="https://www.amfiindia.com/net-asset-value" target="_blank" rel="noopener">AMFI website</a> (the official mutual fund body). The code is listed next to each plan.</li>
+      </ol>
+      {{ m.notice('Pick the <strong>Direct Plan - Growth</strong> version when you can. A '|safe ~ term('direct plan', 'direct plan') ~ ' has lower fees, and “Growth” means profits stay invested instead of being paid out.'|safe) }}
+    </section>
+
+    <section class="panel" aria-labelledby="alloc-h">
+      <div class="panel-head"><h2 id="alloc-h" style="font-size:17px">Your target mix</h2><a class="small" href="/settings">Change in Settings</a></div>
+      <p class="small muted" style="margin-top:-6px">Your {{ term('allocation', 'target allocation') }}: the mix of fund types you're aiming for. Mausam only flags it when your real mix drifts far from this.</p>
+      {% set counts = {'equity': 0, 'debt': 0, 'international': 0} %}
+      {% for f in active %}{% if f.asset_class in counts %}{% set _ = counts.update({f.asset_class: counts[f.asset_class] + 1}) %}{% endif %}{% endfor %}
+      {% for k in ['equity', 'debt', 'international'] %}
+      {% set v = (target.get(k) if target else 0) or 0 %}
+      <div class="alloc-row">
+        <span>{{ k|asset }}</span>
+        <span class="alloc-bar" role="img" aria-label="{{ k|asset }} target {{ v|round|int }}%"><span style="width:{{ [v, 100]|min }}%"></span></span>
+        <span class="num" style="text-align:right;font-weight:600">{{ v|round|int }}%</span>
+      </div>
+      <p class="small muted" style="margin:-4px 0 10px 120px">{{ counts[k] }} fund{{ '' if counts[k] == 1 else 's' }} in your list</p>
+      {% endfor %}
+      <p class="small" style="margin:6px 0 0"><a href="/portfolio">See your real mix on the Portfolio page</a></p>
+    </section>
+  </div>
+</div>
+
+{# ---------- Your funds ---------- #}
+<section class="panel" aria-labelledby="list-h" style="margin-top:20px">
+  <div class="panel-head"><h2 id="list-h">Your funds</h2><span class="small muted">{{ active|length }} active</span></div>
+  {% if active %}
+  <div class="fund-list">
+    {% for f in active %}
+    {% set name = f.short_name or f.scheme_name %}
+    <article class="fund-card" style="--fund: {{ f.colour or 'var(--monsoon)' }}" data-id="{{ f.id }}" data-name="{{ name }}"
+             data-bench="{{ f.benchmark_key or '' }}" data-sip="{{ f.sip_amount if f.sip_amount is not none else '' }}" data-day="{{ f.sip_day if f.sip_day is not none else '' }}">
+      <div class="top">
+        <div style="min-width:0">
+          <h3><a href="/funds/{{ f.scheme_code }}" style="color:inherit;text-decoration:none">{{ name }}</a></h3>
+          <p class="full">{{ f.scheme_name }} · code {{ f.scheme_code }}</p>
+        </div>
+        <div class="row" style="gap:6px">
+          <button class="btn btn-sm" type="button" data-act="edit" aria-expanded="false" aria-controls="edit-{{ f.id }}"><i data-lucide="pencil" aria-hidden="true"></i>Edit</button>
+          <a class="btn btn-sm btn-ghost" href="/forecasts?code={{ f.scheme_code }}"><i data-lucide="trending-up" aria-hidden="true"></i>Forecast</a>
+          <button class="btn btn-sm btn-danger" type="button" data-act="remove"><i data-lucide="trash-2" aria-hidden="true"></i>Remove</button>
+        </div>
+      </div>
+      <div class="fund-facts">
+        <div><span class="k">Type</span>{{ f.asset_class|asset }}{% if f.scheme_category %} · <span class="muted">{{ f.scheme_category }}</span>{% endif %}</div>
+        <div><span class="k">Compared with</span>{{ f.benchmark_key|bench }}{% if f.benchmark_is_override %} <span class="chip" style="font-size:11px;padding:1px 7px">your choice</span>{% endif %}</div>
+        <div><span class="k">{{ term('category average', 'Category average') }}</span>{% if f.peer_count %}Category average from {{ f.peer_count }} similar fund{{ '' if f.peer_count == 1 else 's' }}{% else %}<span class="muted">No similar funds found yet</span>{% endif %}{% if f.peer_group %}<span class="small muted"> ({{ f.peer_group }})</span>{% endif %}</div>
+        <div><span class="k">{{ term('sip', 'SIP') }}</span>{% if f.sip_amount and f.sip_day %}{{ f.sip_amount|inr }} on day {{ f.sip_day }} of each month{% else %}<span class="muted">No SIP set</span>{% endif %}</div>
+      </div>
+      <form class="edit" id="edit-{{ f.id }}" hidden novalidate>
+        <div class="form-grid">
+          <div class="field">
+            <label for="e-name-{{ f.id }}">Friendly name</label>
+            <input type="text" id="e-name-{{ f.id }}" name="short_name" maxlength="60" value="{{ name }}">
+          </div>
+          <div class="field">
+            <label for="e-bench-{{ f.id }}">Benchmark</label>
+            <select id="e-bench-{{ f.id }}" name="benchmark_key">
+              {% for k in benchmark_choices %}<option value="{{ k }}" {% if k == f.benchmark_key %}selected{% endif %}>{{ BENCHMARK_LABELS.get(k, k) }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="e-sip-{{ f.id }}">SIP amount (₹)</label>
+            <input type="number" id="e-sip-{{ f.id }}" name="sip_amount" min="0" step="100" value="{{ '%.0f'|format(f.sip_amount) if f.sip_amount is not none else '' }}" placeholder="none">
+          </div>
+          <div class="field">
+            <label for="e-day-{{ f.id }}">SIP day (1 to 28)</label>
+            <input type="number" id="e-day-{{ f.id }}" name="sip_day" min="1" max="28" step="1" value="{{ f.sip_day if f.sip_day is not none else '' }}" placeholder="none">
+          </div>
+        </div>
+        <p class="hint" style="margin-top:-4px">Changing the benchmark rebuilds 26 weeks of comparisons, which can take a little while. Clear both SIP boxes to remove the SIP.</p>
+        <div class="row" style="margin-top:8px">
+          <button class="btn btn-primary btn-sm" type="submit">Save changes</button>
+          <button class="btn btn-sm btn-ghost" type="button" data-act="cancel">Cancel</button>
+        </div>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  {{ m.empty('list-plus', 'No funds yet', 'Use the form above to add your first fund. It takes about a minute, and Mausam does the rest.') }}
+  {% endif %}
+
+  {% if removed %}
+  <h3 style="font-size:15px;margin-top:24px">Removed funds</h3>
+  <p class="small muted">These no longer show on your pages or in reports. Their history and transactions are kept, so you can add them back any time.</p>
+  <div class="fund-list">
+    {% for f in removed %}
+    <article class="fund-card removed">
+      <div class="top">
+        <div style="min-width:0">
+          <h3 style="font-size:15px">{{ f.short_name or f.scheme_name }}</h3>
+          <p class="full">{{ f.scheme_name }} · code {{ f.scheme_code }}{% if f.removed_at %} · removed {{ f.removed_at|d }}{% endif %}</p>
+        </div>
+        <button class="btn btn-sm" type="button" data-readd="{{ f.scheme_code }}"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Add back</button>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{{ m.json_data('manage-data', {'labels': BENCHMARK_LABELS}) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = Mausam.esc;
+  const LABELS = (Mausam.data('manage-data') || {}).labels || {};
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+  // =============== Search by name ===============
+  const q = $('s-q'), results = $('s-results');
+  let searchSeq = 0;
+  const search = debounce(async () => {
+    const text = q.value.trim();
+    if (text.length < 3) { results.hidden = true; results.innerHTML = ''; return; }
+    const my = ++searchSeq;
+    results.hidden = false;
+    results.innerHTML = '<li class="status">Searching mfapi.in…</li>';
+    try {
+      const rows = await Mausam.api('GET', '/api/funds/search?q=' + encodeURIComponent(text)) || [];
+      if (my !== searchSeq) return;
+      if (!rows.length) { results.innerHTML = '<li class="status">No funds found. Try fewer words, or the fund house name.</li>'; return; }
+      results.innerHTML = rows.map((r) => {
+        const nm = String(r.scheme_name || '');
+        const good = /direct/i.test(nm) && /growth/i.test(nm);
+        return `<li><button type="button" data-code="${esc(r.scheme_code)}" data-name="${esc(nm)}">
+          <span>${esc(nm)}${good ? ' <span class="chip teal" style="font-size:11px;padding:0 7px">Direct · Growth</span>' : ''}</span>
+          <span class="code">${esc(r.scheme_code)}</span></button></li>`;
+      }).join('');
+    } catch (e) {
+      if (my !== searchSeq) return;
+      results.innerHTML = `<li class="status">${esc(e.message)}</li>`;
+    }
+  }, 350);
+  q.addEventListener('input', search);
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { const b = results.querySelector('button'); if (b) { e.preventDefault(); b.focus(); } }
+    if (e.key === 'Escape') results.hidden = true;
+  });
+  results.addEventListener('keydown', (e) => {
+    const items = Array.from(results.querySelectorAll('button'));
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); (i > 0 ? items[i - 1] : q).focus(); }
+    if (e.key === 'Escape') { results.hidden = true; q.focus(); }
+  });
+  results.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-code]');
+    if (!b) return;
+    code.value = b.dataset.code;
+    q.value = b.dataset.name;
+    results.hidden = true;
+    loadPreview();
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrap')) results.hidden = true; });
+
+  // =============== Scheme code + live preview ===============
+  const code = $('a-code'), pv = $('a-preview'), addBtn = $('a-add'), addHint = $('a-add-hint');
+  const nameEl = $('a-name'), benchEl = $('a-bench');
+  let current = null, pvSeq = 0;
+  nameEl.addEventListener('input', () => { nameEl.dataset.touched = '1'; });
+
+  function setAdd(ok, hint) { addBtn.disabled = !ok; addHint.textContent = hint; }
+  function showEmpty() {
+    pv.innerHTML = '';
+    current = null;
+    setAdd(false, 'Look up a fund first.');
+  }
+  async function loadPreview() {
+    const c = code.value.trim();
+    current = null;
+    if (!c) { showEmpty(); return; }
+    if (!/^\d{3,7}$/.test(c)) {
+      code.setAttribute('aria-invalid', 'true');
+      pv.innerHTML = '<div class="pv bad"><strong>That doesn\'t look like a scheme code.</strong> It should be a number, usually 6 digits (for example 120716).</div>';
+      setAdd(false, 'Fix the scheme code first.');
+      return;
+    }
+    code.removeAttribute('aria-invalid');
+    const my = ++pvSeq;
+    pv.innerHTML = '<div class="pv"><div class="skeleton" style="height:18px;width:70%"></div><div class="skeleton" style="height:14px;width:45%;margin-top:10px"></div><div class="skeleton" style="height:14px;width:60%;margin-top:8px"></div><span class="sr-only">Looking up the fund…</span></div>';
+    setAdd(false, 'Looking it up…');
+    try {
+      const p = await Mausam.api('GET', '/api/funds/preview/' + encodeURIComponent(c));
+      if (my !== pvSeq) return;
+      current = p;
+      renderPreview(p);
+    } catch (e) {
+      if (my !== pvSeq) return;
+      pv.innerHTML = `<div class="pv bad"><strong>We couldn't use that code.</strong> ${esc(e.message)}</div>`;
+      setAdd(false, 'Try another code or search by name.');
+    }
+  }
+  function renderPreview(p) {
+    const warn = (p.warnings || []).map((w) => `<li>${esc(w)}</li>`).join('');
+    pv.innerHTML = `
+      <div class="pv ${p.duplicate ? 'bad' : 'ok'}">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div style="min-width:0;flex:1"><h3>${esc(p.scheme_name)}</h3><div class="small muted">${esc(p.fund_house || '')}</div></div>
+          ${p.duplicate ? '<span class="chip loss">Already in your list</span>' : '<span class="chip gain">✓ Found</span>'}
+        </div>
+        <dl>
+          <dt>Category</dt><dd>${esc(p.scheme_category || '–')}</dd>
+          <dt>Latest NAV</dt><dd class="num">₹${Number(p.nav).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} <span class="muted">on ${Mausam.date(p.nav_date)}</span></dd>
+          <dt>Fund type</dt><dd>${esc({ equity: 'Equity', debt: 'Debt', international: 'International' }[p.asset_class] || p.asset_class || '–')}</dd>
+          <dt>Compared with</dt><dd>${esc(p.benchmark_label || LABELS[p.benchmark_key] || p.benchmark_key || '–')}
+            ${p.benchmark_why ? `<div class="small muted">${esc(p.benchmark_why)}</div>` : ''}
+            ${p.needs_confirmation ? '<div class="small">Mausam isn\'t fully sure about this one. Check it, and change it below if needed.</div>' : ''}</dd>
+          <dt>Similar funds group</dt><dd>${esc(p.peer_group || '–')}</dd>
+        </dl>
+        ${warn ? `<div class="notice warn" style="margin-top:12px"><i data-lucide="alert-triangle" aria-hidden="true"></i><ul style="margin:0;padding-left:18px">${warn}</ul></div>` : ''}
+        ${p.duplicate ? '<p class="small" style="margin:10px 0 0">This fund is already in your list below, so it can\'t be added twice.</p>' : ''}
+      </div>`;
+    if (!nameEl.dataset.touched || !nameEl.value) { nameEl.value = p.suggested_name || ''; delete nameEl.dataset.touched; }
+    benchEl.options[0].textContent = `Automatic: ${p.benchmark_label || LABELS[p.benchmark_key] || 'best match'}`;
+    Mausam.icons();
+    if (p.duplicate) setAdd(false, 'Already in your list.');
+    else setAdd(true, 'Ready to add.');
+  }
+  const previewSoon = debounce(loadPreview, 500);
+  code.addEventListener('input', () => {
+    code.value = code.value.replace(/[^\d]/g, '');
+    current = null; setAdd(false, 'Looking it up…');
+    if (code.value.length >= 5) previewSoon(); else if (!code.value) showEmpty(); else setAdd(false, 'Keep typing the code…');
+  });
+  code.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadPreview(); } });
+  $('a-lookup').addEventListener('click', loadPreview);
+
+  // =============== Add ===============
+  $('add-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!current || current.duplicate || String(current.scheme_code) !== code.value.trim()) { loadPreview(); return; }
+    const day = $('a-day').value, sip = $('a-sip').value;
+    if (day !== '' && (Number(day) < 1 || Number(day) > 28)) { Mausam.toast('SIP day must be between 1 and 28.', 'error'); return; }
+    const body = { scheme_code: Number(code.value), short_name: nameEl.value.trim() || null,
+      sip_amount: sip === '' ? null : Number(sip), sip_day: day === '' ? null : Number(day), benchmark_key: benchEl.value || null };
+    const prog = $('a-progress'), el = $('a-elapsed');
+    prog.hidden = false; Mausam.icons();
+    const start = Date.now();
+    const timer = setInterval(() => { el.textContent = `(${Math.round((Date.now() - start) / 1000)} s so far)`; }, 1000);
+    Mausam.busy(addBtn, async () => {
+      try {
+        const r = await Mausam.api('POST', '/api/funds', body);
+        clearInterval(timer);
+        const bits = [];
+        if (r.nav_rows) bits.push(`${Number(r.nav_rows).toLocaleString('en-IN')} days of NAV history`);
+        if (r.snapshots) bits.push(`${r.snapshots} weeks rebuilt`);
+        Mausam.toast(`Added ${r.short_name || 'your fund'}.` + (bits.length ? ` Loaded ${bits.join(', ')}.` : ''));
+        setTimeout(() => { location.href = '/manage'; }, 1200);
+      } catch (err) {
+        clearInterval(timer);
+        prog.hidden = true;
+        Mausam.toast(err.message, 'error');
+      }
+    });
+  });
+
+  // =============== Edit / remove existing funds ===============
+  document.querySelectorAll('.fund-card[data-id]').forEach((card) => {
+    const id = card.dataset.id;
+    const form = card.querySelector('form.edit');
+    const editBtn = card.querySelector('[data-act="edit"]');
+    const toggle = (open) => { form.hidden = !open; editBtn.setAttribute('aria-expanded', String(open)); if (open) form.querySelector('input').focus(); };
+    editBtn.addEventListener('click', () => toggle(form.hidden));
+    form.querySelector('[data-act="cancel"]').addEventListener('click', () => { form.reset(); toggle(false); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const changes = {};
+      const nm = form.elements.short_name.value.trim();
+      if (!nm) { Mausam.toast('Give the fund a short friendly name.', 'error'); return; }
+      if (nm !== card.dataset.name) changes.short_name = nm;
+      if (form.elements.benchmark_key.value !== card.dataset.bench) changes.benchmark_key = form.elements.benchmark_key.value;
+      const sip = form.elements.sip_amount.value, day = form.elements.sip_day.value;
+      if (String(sip === '' ? '' : Number(sip)) !== String(card.dataset.sip === '' ? '' : Number(card.dataset.sip))) changes.sip_amount = sip === '' ? null : Number(sip);
+      if (String(day) !== String(card.dataset.day)) changes.sip_day = day === '' ? null : Number(day);
+      if (day !== '' && (Number(day) < 1 || Number(day) > 28)) { Mausam.toast('SIP day must be between 1 and 28.', 'error'); return; }
+      if (!Object.keys(changes).length) { toggle(false); Mausam.toast('Nothing changed.'); return; }
+      const btn = form.querySelector('button[type="submit"]');
+      if ('benchmark_key' in changes) Mausam.toast('Saving and rebuilding comparisons against the new benchmark… this can take up to a minute.');
+      Mausam.busy(btn, async () => {
+        try {
+          await Mausam.api('PATCH', `/api/funds/${id}`, changes);
+          Mausam.toast('Saved.');
+          setTimeout(() => location.reload(), 600);
+        } catch (err) { Mausam.toast(err.message, 'error'); }
+      });
+    });
+    const rm = card.querySelector('[data-act="remove"]');
+    rm.addEventListener('click', async () => {
+      const ok = await Mausam.confirm(`Remove ${card.dataset.name}?`,
+        'It disappears from your pages and future reports. Its history and transactions are kept.', 'Remove fund');
+      if (!ok) return;
+      Mausam.busy(rm, async () => {
+        try {
+          await Mausam.api('DELETE', `/api/funds/${id}`);
+          Mausam.toast(`${card.dataset.name} removed. You can add it back from "Removed funds".`);
+          setTimeout(() => location.reload(), 700);
+        } catch (err) { Mausam.toast(err.message, 'error'); }
+      });
+    });
+  });
+
+  // Add back a removed fund: fill the code and preview it.
+  document.querySelectorAll('[data-readd]').forEach((b) => b.addEventListener('click', () => {
+    code.value = b.dataset.readd;
+    $('add').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    loadPreview();
+  }));
+
+  // Pre-fill from ?code=
+  const pre = new URLSearchParams(location.search).get('code');
+  if (pre && /^\d{3,7}$/.test(pre)) { code.value = pre; loadPreview(); }
+  else showEmpty();
+})();
+</script>
+{% endblock %}

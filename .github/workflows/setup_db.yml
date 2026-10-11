@@ -1,0 +1,40 @@
+# One-off database setup without a local Python install.
+name: Set up database
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "What to run"
+        type: choice
+        options: [migrate, seed_all, weekly_report]
+        default: migrate
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.8-flash' }}
+      GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET || 'actions-only' }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Migrate
+        run: python db/migrate.py
+      - name: Seed Meera's demo data
+        if: inputs.step == 'seed_all'
+        run: python scripts/seed_meera.py --yes
+      - name: Weekly report
+        if: inputs.step == 'weekly_report'
+        run: python scripts/seed_meera.py --yes --only report

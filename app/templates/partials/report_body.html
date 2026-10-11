@@ -1,0 +1,88 @@
+{# Report body. Used for the stored report_html and by the Report detail page.
+   Context: rj (report json), facts, news (rows with why_it_matters), outlook, week, moves, macro #}
+{% set sky = weather(rj.verdict) %}
+<article class="report-body">
+  <header style="margin-bottom:16px">
+    <div class="muted small">Week ending {{ week|d }}</div>
+    <h2 style="font-size:28px;margin:4px 0 8px">{{ sky.label }}: {{ rj.headline }}</h2>
+  </header>
+
+  <div class="verdict-box {{ sky.key }}" style="margin-bottom:20px">
+    <div class="v-title">{{ rj.verdict }}</div>
+    <p style="margin:6px 0 0">{{ rj.verdict_reason }}</p>
+  </div>
+
+  <section style="margin-bottom:18px">
+    <h3>The market this week</h3>
+    <p>{{ rj.market_paragraph }}</p>
+    {% if macro and macro != rj.market_paragraph %}<p class="muted">{{ macro }}</p>{% endif %}
+    {% if moves %}
+    <div class="table-wrap"><table class="mini-table">
+      <thead><tr><th>Index</th><th class="num">Week</th><th class="num">Month</th><th class="num">Year to date</th><th>Source</th></tr></thead>
+      <tbody>
+      {% for key, v in moves.items() %}
+        <tr><td>{{ {'NIFTY50':'Nifty 50','MIDCAP150':'Nifty Midcap 150','SMALLCAP100':'Nifty Smallcap 100','SMALLCAP250':'Nifty Smallcap 250','SP500_INR':'S&P 500 (in rupees)','NASDAQ100_INR':'Nasdaq 100 (in rupees)'}.get(key, key) }}</td>
+          <td class="num">{{ v.ret_1w|pct }}</td><td class="num">{{ v.ret_1m|pct }}</td><td class="num">{{ v.ret_ytd|pct }}</td>
+          <td class="small muted">{{ 'Index fund proxy' if v.source == 'proxy' else 'Yahoo Finance' }}</td></tr>
+      {% endfor %}
+      </tbody></table></div>
+    {% endif %}
+  </section>
+
+  <section>
+    <h3>Your funds</h3>
+    {% set by_name = {} %}
+    {% for f in facts.funds %}{% set _ = by_name.update({f.name: f}) %}{% endfor %}
+    {% for f in rj.funds %}
+    {% set ff = by_name.get(f.name, {}) %}
+    <div class="fund-summary">
+      <div>
+        <h4 style="font-size:17px">{{ f.name }}
+          {% if ff.stale %}<span class="chip warn">Stale data</span>{% endif %}</h4>
+        <ol>{% for s in f.summary %}<li>{{ s }}</li>{% endfor %}</ol>
+      </div>
+      <div class="table-wrap">
+        <table class="mini-table">
+          <thead><tr><th></th><th class="num">Week</th><th class="num">Month</th></tr></thead>
+          <tbody>
+            <tr><td>Fund</td><td class="num">{{ ff.ret_1w|pct }}</td><td class="num">{{ ff.ret_1m|pct }}</td></tr>
+            <tr><td>{{ ff.benchmark if ff.benchmark and not ff.benchmark.startswith('none') else 'Benchmark' }}</td><td class="num">{{ ff.bench_ret_1w|pct }}</td><td class="num">{{ ff.bench_ret_1m|pct }}</td></tr>
+            <tr><td>Category average</td><td class="num">{{ ff.cat_ret_1w|pct }}</td><td class="num">{{ ff.cat_ret_1m|pct }}</td></tr>
+            <tr><td>Gap vs benchmark</td><td class="num" colspan="2">{{ ff.delta_bench_1w_pp|pts }}</td></tr>
+            <tr><td>This week's move</td><td colspan="2" style="text-align:right">{{ ff.attribution_label }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  {% if news %}
+  <section style="margin-top:12px">
+    <h3>News used for context</h3>
+    <ul class="news-list">
+      {% for n in news %}
+      <li><a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>
+        <span class="news-meta">#{{ n.id }} · {{ n.source }}{% if n.published_at %} · {{ n.published_at|d('short') }}{% endif %}</span>
+        {% if n.why_it_matters %}<span class="why">Why it matters: {{ n.why_it_matters }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% else %}
+  <p class="muted">No major news found for this week.</p>
+  {% endif %}
+
+  <section style="margin-top:18px">
+    <h3>Outlook ranges (appendix)</h3>
+    {% if outlook %}
+    <p class="small muted">From the hybrid ARIMA + Ridge model, run Friday night. An educational estimate, not a guarantee or advice. These ranges never affect the verdict.</p>
+    <ul>
+      {% for o in outlook %}
+      <li>{{ o.name }}: next 30 trading days, likely NAV between ₹{{ o.lo80|num(2) }} and ₹{{ o.hi80|num(2) }} (80% range).</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="small muted">No forecast ranges yet. They appear after the Friday-night ML run.</p>{% endif %}
+  </section>
+
+  <p class="disclaimer" style="margin-top:18px">Numbers were computed by Mausam's code from public data. The words were written by Gemini Flash from those numbers and checked by code before saving. Mausam is an educational tool, not investment advice. Mutual fund investments are subject to market risks.</p>
+</article>

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Weekly reports{% endblock %}
+
+{% block head %}
+<style>
+  .report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .report-card {
+    display: grid; grid-template-columns: 150px 1fr auto; gap: 18px; align-items: center; padding: 16px 20px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow);
+    text-decoration: none; color: var(--ink); position: relative;
+  }
+  .report-card::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 3px 3px 0; background: var(--wx, var(--monsoon)); }
+  .report-card.clear { --wx: var(--saffron); } .report-card.clouds { --wx: var(--slate); } .report-card.storm { --wx: var(--plum); }
+  .report-card:hover { border-color: var(--monsoon); }
+  .report-card .wx { font-weight: 600; font-size: 14px; }
+  .report-card .week { font-size: 13px; color: var(--slate); margin-top: 4px; }
+  .report-card .headline { font-family: var(--font-head); font-size: 17px; font-weight: 600; line-height: 1.3; margin: 0 0 4px; }
+  .report-card .verdict { font-size: 14px; color: var(--slate); margin: 0; }
+  .report-card .meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .report-card.latest { border-color: color-mix(in srgb, var(--monsoon) 45%, var(--line)); }
+  .gen-progress { display: flex; gap: 12px; align-items: center; }
+  .gen-progress .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--line); }
+  .gen-progress .bar span { display: block; height: 100%; width: 0; background: var(--monsoon); transition: width 1s linear; }
+  @media (max-width: 700px) {
+    .report-card { grid-template-columns: 1fr; gap: 8px; padding: 14px 16px; }
+    .report-card .meta { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Weekly reports</h1>
+    <p>Every Saturday morning Mausam writes a short, plain-language weather report on your funds. Open any week to read it again.</p>
+  </div>
+  <button class="btn btn-primary no-print" type="button" id="gen-report">
+    <i data-lucide="sparkles" aria-hidden="true"></i>Generate this week's report now
+  </button>
+</div>
+
+<div class="panel" id="gen-panel" hidden style="margin-bottom:20px" role="status" aria-live="polite">
+  <div class="gen-progress">
+    <i data-lucide="pen-line" aria-hidden="true" style="width:20px;height:20px;color:var(--monsoon);flex:none"></i>
+    <div style="flex:1;min-width:0">
+      <strong id="gen-step">Gathering this week's numbers…</strong>
+      <div class="small muted">This usually takes 30 to 90 seconds. Please keep this page open. <span id="gen-elapsed"></span></div>
+      <div class="bar" style="margin-top:8px" aria-hidden="true"><span id="gen-bar"></span></div>
+    </div>
+  </div>
+</div>
+
+{% if reports %}
+<ul class="report-list" aria-label="All weekly reports, newest first">
+  {% for r in reports %}
+  {% set w = weather(r.verdict) %}
+  <li>
+    <a class="report-card {{ w.key }}{% if loop.first %} latest{% endif %}" href="/reports/{{ r.week_ending.isoformat() }}">
+      <div>
+        <div class="wx">{{ m.weather_icon(r.verdict, 22) }}</div>
+        <div class="week">Week ending {{ r.week_ending|d }}</div>
+      </div>
+      <div style="min-width:0">
+        <p class="headline">{{ r.headline or r.verdict }}</p>
+        <p class="verdict"><span class="sr-only">Verdict: </span>{{ r.verdict }}{% if r.verdict_reason %}. {{ r.verdict_reason }}{% endif %}</p>
+      </div>
+      <div class="meta">
+        {% if loop.first %}<span class="chip teal">Latest</span>{% endif %}
+        {% if r.used_fallback %}<span class="chip warn" data-tip="Gemini was unavailable or its draft failed Mausam's checks, so this report was written with the plain template. The numbers are the same.">Plain template</span>{% endif %}
+        {% if r.emailed_at %}
+          <span class="chip"><i data-lucide="mail-check" aria-hidden="true"></i>Emailed {{ r.emailed_at|d('short') }}</span>
+        {% else %}
+          <span class="chip"><i data-lucide="mail-x" aria-hidden="true"></i>Not emailed</span>
+        {% endif %}
+        {% if r.trigger == 'manual' %}<span class="small muted">Made by hand</span>{% endif %}
+      </div>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+<p class="small muted" style="margin-top:14px">{{ reports|length }} report{{ '' if reports|length == 1 else 's' }} so far. The weather is set by Mausam's code from your numbers; Gemini only writes the words.</p>
+{% else %}
+<div class="panel">
+  {{ m.empty('cloud-sun', 'No reports yet', "Your first weekly report arrives on Saturday morning. You don’t have to wait: press “Generate this week’s report now” above to make one today.") }}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const btn = document.getElementById('gen-report');
+  const panel = document.getElementById('gen-panel');
+  const step = document.getElementById('gen-step');
+  const bar = document.getElementById('gen-bar');
+  const elapsed = document.getElementById('gen-elapsed');
+  const STEPS = [
+    [0, "Gathering this week's numbers…"],
+    [8, 'Comparing each fund with its benchmark and category…'],
+    [18, 'Reading the week\'s market news…'],
+    [28, 'Gemini is writing the report…'],
+    [50, 'Checking every number in the draft against the facts…'],
+    [75, 'Almost there. Saving and preparing the email…'],
+  ];
+  if (!btn) return;
+  btn.addEventListener('click', () => Mausam.busy(btn, async () => {
+    panel.hidden = false;
+    Mausam.icons();
+    const start = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - start) / 1000);
+      elapsed.textContent = `(${s} s so far)`;
+      bar.style.width = Math.min(95, (s / 90) * 100) + '%';
+      for (const [at, text] of STEPS) if (s >= at) step.textContent = text;
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    try {
+      const res = await Mausam.api('POST', '/api/reports/generate');
+      clearInterval(timer);
+      bar.style.width = '100%';
+      step.textContent = res && res.used_fallback
+        ? 'Done. This week used the plain template because the AI draft did not pass our checks.'
+        : 'Done. Opening your reports…';
+      setTimeout(() => location.reload(), 900);
+    } catch (e) {
+      clearInterval(timer);
+      panel.hidden = true;
+      Mausam.toast(e.message, 'error');
+    }
+  }));
+})();
+</script>
+{% endblock %}

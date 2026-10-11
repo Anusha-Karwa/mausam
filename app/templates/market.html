@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Market pulse{% endblock %}
+
+{% block head %}
+<style>
+  .idx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .idx-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .idx-card[aria-current="true"] { border-color: var(--monsoon); box-shadow: 0 0 0 2px var(--monsoon-soft), var(--shadow); }
+  .idx-card .idx-name { font-weight: 600; font-size: 15px; line-height: 1.3; }
+  .idx-card .idx-level { font-family: var(--font-head); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .idx-moves { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; margin: 4px 0; }
+  .idx-moves dt { color: var(--slate); }
+  .idx-moves dd { margin: 0; text-align: right; }
+  .idx-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 8px; }
+  .idx-foot .chip { font-size: 12px; padding: 2px 8px; }
+  .chart-controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .chart-state { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; background: var(--surface); }
+  .chart-state .skeleton { width: 100%; height: 100%; }
+  .macro-text { font-size: 16px; line-height: 1.6; white-space: pre-line; margin: 0; }
+  .news-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .news-tags .chip { font-size: 12px; padding: 1px 8px; font-weight: 500; }
+  .news-list li { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .news-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set avail = cards|selectattr('available')|list %}
+<div class="stack">
+  <div class="page-head">
+    <div>
+      <h1>Market pulse</h1>
+      <p>How the big markets moved, what's in the news, and how your funds did against their own markets.</p>
+    </div>
+  </div>
+
+  {# ---------- Index cards ---------- #}
+  <section aria-labelledby="idx-h">
+    <h2 id="idx-h" class="sr-only">Market indices</h2>
+    <div class="idx-grid">
+      {% for c in cards %}
+      <article class="idx-card" data-key="{{ c.key }}" aria-labelledby="idx-{{ c.key }}">
+        <span class="idx-name" id="idx-{{ c.key }}">{{ c.label }}</span>
+        {% if c.available %}
+          <span class="idx-level">{% if c.source == 'proxy' %}₹{% endif %}{{ c.level|num(2) }}</span>
+          <span class="small muted">{% if c.source == 'proxy' %}price of a fund that tracks it · {% endif %}{{ c.as_of|d('short') }}</span>
+          <dl class="idx-moves">
+            <dt>1 day</dt><dd>{{ c.ret_1d|pct }}</dd>
+            <dt>1 week</dt><dd>{{ c.ret_1w|pct }}</dd>
+            <dt>1 month</dt><dd>{{ c.ret_1m|pct }}</dd>
+            <dt>{{ term('ytd', 'Year to date') }}</dt><dd>{{ c.ret_ytd|pct }}</dd>
+          </dl>
+          {% if c.ret_1m is none and c.ret_ytd is none %}
+            <span class="small muted">Not enough history yet for longer moves. They'll fill in as data builds up.</span>
+          {% endif %}
+          <div class="idx-foot">
+            {% if c.source == 'proxy' %}
+              <span class="chip warn" data-tip="{{ c.note or 'Benchmark measured via an index fund that tracks it.' }}">Via index fund</span>
+            {% else %}
+              <span class="chip" data-tip="{{ c.note or 'Price index from Yahoo Finance' }}">Yahoo Finance</span>
+            {% endif %}
+            <button type="button" class="btn btn-sm btn-ghost" data-show="{{ c.key }}">Show chart</button>
+          </div>
+        {% else %}
+          <span class="idx-level muted">–</span>
+          <span class="small muted">Not enough history yet. Prices for this index haven't arrived; they'll appear after the next nightly refresh.</span>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    <p class="chart-summary">Index levels are price indices: they leave out dividends. S&amp;P 500 and Nasdaq 100 are converted to rupees, so currency moves count too.</p>
+  </section>
+
+  {# ---------- Index chart ---------- #}
+  <section class="panel" aria-labelledby="ichart-h">
+    <div class="panel-head"><h2 id="ichart-h"><span id="ichart-name">{{ avail[0].label if avail else 'Index' }}</span> over time</h2><span class="small muted" id="ichart-src"></span></div>
+    {% if avail %}
+    <div class="chart-controls">
+      <label class="sr-only" for="ichart-key">Index</label>
+      <select id="ichart-key" style="max-width:260px">
+        {% for c in avail %}<option value="{{ c.key }}">{{ c.label }}</option>{% endfor %}
+      </select>
+      <div class="segmented" role="group" aria-label="Time range" id="ichart-range">
+        {% for r in ['1M', '3M', '6M', '1Y', '3Y', '5Y'] %}<button type="button" data-range="{{ r }}" aria-pressed="{{ 'true' if r == '1Y' else 'false' }}">{{ r }}</button>{% endfor %}
+      </div>
+    </div>
+    <div class="chart-box">
+      <canvas id="ichart" role="img" aria-label="Line chart of the selected market index over the chosen time range"></canvas>
+      <div class="chart-state" id="ichart-state">{{ m.skeleton(1, 260) }}</div>
+    </div>
+    <p class="chart-summary" id="ichart-sum" aria-live="polite"></p>
+    {% else %}
+      {{ m.empty('globe', 'No index data yet', 'Index prices arrive with the nightly data refresh. You can run one now from System status.', '/status', 'Open system status') }}
+    {% endif %}
+  </section>
+
+  {# ---------- Funds vs their markets ---------- #}
+  <section class="panel" aria-labelledby="fvm-h">
+    <div class="panel-head">
+      <h2 id="fvm-h">How your funds moved vs their markets this week</h2>
+      {% if week %}<span class="small muted">week ending {{ week|d }}</span>{% endif %}
+    </div>
+    {% if snaps %}
+      <div class="chart-box"><canvas id="fvm-chart" role="img" aria-label="Grouped bar chart: each fund's 1-week return next to its benchmark and category average"></canvas></div>
+      <p class="chart-summary" id="fvm-sum"></p>
+    {% else %}
+      {{ m.empty('activity', 'No weekly snapshot yet', "Mausam compares your funds with their markets every Saturday. Add funds, or generate this week's report to create the first snapshot.", '/reports', 'Go to weekly reports') }}
+    {% endif %}
+  </section>
+
+  <div class="grid">
+    {# ---------- Macro summary ---------- #}
+    <section class="panel span-5" aria-labelledby="macro-h">
+      <div class="panel-head">
+        <h2 id="macro-h">This week in the markets</h2>
+        {% if market %}<span class="small muted">week ending {{ market.week_ending|d('short') }}</span>{% endif %}
+      </div>
+      {% if market and market.macro_summary %}
+        <p class="macro-text">{{ market.macro_summary }}</p>
+        <p class="small muted" style="margin:14px 0 0;display:flex;gap:6px;align-items:center"><i data-lucide="sparkles" aria-hidden="true" style="width:15px;height:15px"></i>Written by Gemini Flash from this week's index moves and headlines.</p>
+      {% else %}
+        <p class="muted" style="margin:0">A short summary of the week is written every Saturday with your report.</p>
+      {% endif %}
+    </section>
+
+    {# ---------- News ---------- #}
+    <section class="panel span-7" aria-labelledby="news-h">
+      <div class="panel-head"><h2 id="news-h">In the news</h2></div>
+      {% if news %}
+      <ul class="news-list">
+        {% for n in news %}
+        <li>
+          {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>{% else %}<span style="font-weight:600">{{ n.title }}</span>{% endif %}
+          <span class="news-meta">{{ n.source or 'Unknown source' }}{% if n.published_at %} · {{ n.published_at|d }}{% endif %}</span>
+          {% if n.why_it_matters %}<span class="why">Why it matters: {{ n.why_it_matters }}</span>{% endif %}
+          {% if n.tags %}<div class="news-tags">{% for t in n.tags %}<span class="chip">{{ t }}</span>{% endfor %}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+        <p class="muted" style="margin:0">Headlines arrive with the nightly refresh and the Saturday report.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+{% set sn = [] %}
+{% for s in snaps %}{% set _ = sn.append({'name': s.short_name or s.scheme_name, 'colour': s.colour, 'ret': s.ret_1w, 'bench': s.bench_ret_1w, 'cat': s.cat_ret_1w, 'bench_label': (s.benchmark_key|bench) if s.benchmark_key and s.benchmark_key != 'CATEGORY_ONLY' else none}) %}{% endfor %}
+{% set ck = [] %}
+{% for c in avail %}{% set _ = ck.append({'key': c.key, 'label': c.label}) %}{% endfor %}
+{{ m.json_data('mk-snaps', sn) }}
+{{ m.json_data('mk-cards', ck) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const snaps = Mausam.data('mk-snaps') || [];
+  const cards = Mausam.data('mk-cards') || [];
+  const $ = (id) => document.getElementById(id);
+  const RANGE_WORDS = { '1M': 'the last month', '3M': 'the last 3 months', '6M': 'the last 6 months', '1Y': 'the last year', '3Y': 'the last 3 years', '5Y': 'the last 5 years' };
+
+  // ---------- index chart ----------
+  const state = { key: cards.length ? cards[0].key : null, range: '1Y' };
+  const cache = {};
+  const stateEl = $('ichart-state');
+  const labelFor = (k) => (cards.find((c) => c.key === k) || {}).label || k;
+
+  function markCards() {
+    document.querySelectorAll('.idx-card').forEach((c) => c.setAttribute('aria-current', c.dataset.key === state.key ? 'true' : 'false'));
+  }
+
+  function drawIndex(data) {
+    const P = Mausam.palette();
+    const pts = data.points || [];
+    $('ichart-name').textContent = labelFor(state.key);
+    $('ichart-src').textContent = data.source === 'proxy' ? 'measured via an index fund that tracks it' : (data.source === 'yahoo' ? 'source: Yahoo Finance' : '');
+    if (pts.length < 2) {
+      stateEl.hidden = false;
+      stateEl.innerHTML = '<p class="muted" style="margin:0">Not enough history yet for this range. Try a shorter range, or check back after a few more days of data.</p>';
+      $('ichart-sum').textContent = '';
+      return;
+    }
+    stateEl.hidden = true;
+    Mausam.chart('ichart', {
+      type: 'line',
+      data: { datasets: [{ label: labelFor(state.key), data: pts.map(([x, y]) => ({ x, y })), borderColor: P.monsoon,
+        backgroundColor: Mausam.alpha(P.monsoon, 0.1), fill: 'origin', tension: 0.15 }] },
+      options: { interaction: { mode: 'index', intersect: false },
+        scales: { x: Mausam.timeScale(), y: { beginAtZero: false, ticks: { callback: (v) => Number(v).toLocaleString('en-IN') } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => Number(c.raw.y).toLocaleString('en-IN', { maximumFractionDigits: 2 }) } } } },
+    });
+    const ch = (pts[pts.length - 1][1] / pts[0][1] - 1) * 100;
+    let s = `Over ${RANGE_WORDS[state.range]}, the ${labelFor(state.key)} ${ch >= 0 ? 'rose ▲' : 'fell ▼'} ${Math.abs(ch).toFixed(1)}% (${Mausam.date(pts[0][0])} to ${Mausam.date(pts[pts.length - 1][0])}).`;
+    if (data.source === 'proxy') s += ' Benchmark measured via an index fund that tracks it.';
+    $('ichart-sum').textContent = s;
+  }
+
+  async function loadIndex() {
+    if (!state.key) return;
+    const k = state.key + '|' + state.range;
+    const want = k;
+    markCards();
+    try {
+      if (!cache[k]) {
+        stateEl.hidden = false;
+        stateEl.innerHTML = '<div class="skeleton" aria-hidden="true"></div><span class="sr-only">Loading…</span>';
+        cache[k] = await Mausam.api('GET', `/api/market/indices?key=${encodeURIComponent(state.key)}&range=${encodeURIComponent(state.range)}`);
+      }
+      if (want !== state.key + '|' + state.range) return;
+      drawIndex(cache[k]);
+    } catch (e) {
+      stateEl.hidden = false;
+      stateEl.innerHTML = `<div><p style="margin:0 0 10px">We couldn't load this index. ${Mausam.esc(e.message)}</p><button type="button" class="btn btn-sm" id="ichart-retry">Try again</button></div>`;
+      const r = $('ichart-retry');
+      if (r) r.addEventListener('click', loadIndex);
+    }
+  }
+
+  const sel = $('ichart-key');
+  if (sel) {
+    sel.addEventListener('change', () => { state.key = sel.value; loadIndex(); });
+    document.querySelectorAll('#ichart-range button').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('#ichart-range button').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+      state.range = b.dataset.range;
+      loadIndex();
+    }));
+    document.querySelectorAll('[data-show]').forEach((b) => b.addEventListener('click', () => {
+      state.key = b.dataset.show;
+      sel.value = state.key;
+      loadIndex();
+      $('ichart-h').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    }));
+    loadIndex();
+  }
+
+  // ---------- funds vs markets ----------
+  function drawFunds() {
+    if (!snaps.length || !$('fvm-chart')) return;
+    const P = Mausam.palette();
+    snaps.forEach((s, i) => { s.c = s.colour || P.fund[i % P.fund.length]; });
+    const hasCat = snaps.some((s) => s.cat !== null && s.cat !== undefined);
+    const datasets = [
+      { label: 'Your fund', data: snaps.map((s) => s.ret), backgroundColor: snaps.map((s) => s.c), borderRadius: 3, maxBarThickness: 30 },
+      { label: 'Its benchmark', data: snaps.map((s) => s.bench), backgroundColor: Mausam.alpha(P.slate.startsWith('#') ? P.slate : '#5D6C80', 0.75), borderRadius: 3, maxBarThickness: 30 },
+    ];
+    if (hasCat) datasets.push({ label: 'Category average', data: snaps.map((s) => s.cat), backgroundColor: Mausam.alpha(P.saffron.startsWith('#') ? P.saffron : '#E9962E', 0.75), borderRadius: 3, maxBarThickness: 30 });
+    Mausam.chart('fvm-chart', {
+      type: 'bar',
+      data: { labels: snaps.map((s) => s.name), datasets },
+      options: {
+        scales: { x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, callback: function (v) { const l = this.getLabelForValue(v); return l.length > 18 ? l.slice(0, 17) + '…' : l; } } },
+          y: { ticks: { callback: (v) => v + '%' }, grid: { color: (ctx) => ctx.tick.value === 0 ? P.slate : P.line } } },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { generateLabels: (chart) => {
+            const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+            if (items[0]) { items[0].fillStyle = P.ink; items[0].strokeStyle = P.ink; items[0].text = 'Your fund (in its colour)'; }
+            return items;
+          } } },
+          tooltip: { callbacks: {
+            label: (c) => {
+              const s = snaps[c.dataIndex];
+              const name = c.datasetIndex === 1 ? (s.bench_label || 'Benchmark') : c.dataset.label;
+              return c.raw === null || c.raw === undefined ? `${name}: no figure` : `${name}: ${Mausam.pct(c.raw)}`;
+            },
+          } },
+        },
+      },
+    });
+    // Plain summary: gap vs benchmark, else vs category average.
+    const gaps = snaps.map((s) => {
+      const ref = s.bench !== null && s.bench !== undefined ? s.bench : s.cat;
+      return { s, gap: s.ret !== null && s.ret !== undefined && ref !== null && ref !== undefined ? s.ret - ref : null };
+    }).filter((g) => g.gap !== null);
+    if (gaps.length) {
+      const kept = gaps.filter((g) => g.gap >= 0).length;
+      gaps.sort((a, b) => b.gap - a.gap);
+      let txt = `${kept} of ${gaps.length} funds kept up with or beat their market this week.`;
+      txt += ` ${gaps[0].s.name} did best against its market (${Mausam.pts(gaps[0].gap)}).`;
+      const last = gaps[gaps.length - 1];
+      if (gaps.length > 1 && last.gap < 0) txt += ` ${last.s.name} lagged most (${Mausam.pts(last.gap)}).`;
+      $('fvm-sum').textContent = txt;
+    } else {
+      $('fvm-sum').textContent = 'We don\'t have benchmark figures for this week yet.';
+    }
+  }
+  drawFunds();
+  document.addEventListener('mausam:theme', () => {
+    drawFunds();
+    const k = state.key + '|' + state.range;
+    if (cache[k]) drawIndex(cache[k]);
+  });
+})();
+</script>
+{% endblock %}

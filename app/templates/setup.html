@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup needed · Mausam</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}">
+</head>
+<body>
+<main class="content" style="max-width:760px">
+  <div class="panel">
+    <h1>Mausam needs a little setup</h1>
+    <p>Some required settings are missing, so Mausam can't start yet. Add them as environment variables
+       (Vercel → Project → Settings → Environment Variables, or a local <code>.env</code> file), then redeploy.</p>
+    <div class="notice warn" style="margin:14px 0"><div>Missing: <strong>{{ missing|join(', ') }}</strong></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Variable</th><th>Needed?</th><th>Status</th><th>What it is</th></tr></thead>
+      <tbody>
+      {% for v in variables %}
+        <tr><td><code>{{ v.name }}</code></td><td>{{ 'Required' if v.required else 'Optional' }}</td>
+          <td>{{ '✓ set' if v.set else '✗ missing' }}</td><td class="small">{{ v.description }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:14px">Values are never shown here. See <code>.env.example</code> and README.md for details.</p>
+  </div>
+</main>
+</body>
+</html>

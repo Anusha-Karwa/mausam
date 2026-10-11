@@ -1,0 +1,56 @@
+{# Illustrated sky for the weather hero. `kind` is clear | clouds | storm | unknown. #}
+<svg viewBox="0 0 360 220" role="img" aria-label="{{ {'clear':'Sunny sky','clouds':'Sun behind passing clouds','storm':'Rain clouds','unknown':'Light clouds'}[kind] }}" class="{{ 'sky-anim' if animate else '' }}">
+  <defs>
+    <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--saffron)" stop-opacity=".55"/>
+      <stop offset="100%" stop-color="var(--saffron)" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cloudFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E4EAEF"/>
+    </linearGradient>
+    <linearGradient id="stormFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8E8AA6"/>
+      <stop offset="100%" stop-color="#6E6886"/>
+    </linearGradient>
+  </defs>
+
+  {% if kind in ('clear', 'clouds', 'unknown') %}
+  <g transform="translate({{ 210 if kind == 'clear' else 170 }}, {{ 100 if kind == 'clear' else 80 }})">
+    <circle r="{{ 92 if kind == 'clear' else 64 }}" fill="url(#sunGlow)" class="rays"/>
+    <g class="rays" stroke="var(--saffron)" stroke-width="5" stroke-linecap="round" opacity="{{ 1 if kind == 'clear' else 0.7 }}">
+      {% for a in range(0, 360, 30) %}
+        <line x1="0" y1="{{ -(58 if kind == 'clear' else 44) }}" x2="0" y2="{{ -(72 if kind == 'clear' else 54) }}" transform="rotate({{ a }})"/>
+      {% endfor %}
+    </g>
+    <circle class="sun-core" r="{{ 44 if kind == 'clear' else 33 }}" fill="var(--saffron)"/>
+  </g>
+  {% endif %}
+
+  {% if kind == 'clear' %}
+  <g class="cloud-a" opacity=".85">
+    <path d="M40 182h64a18 18 0 0 0 0-36 24 24 0 0 0-46 6 15 15 0 0 0-18 30z" fill="url(#cloudFill)"/>
+  </g>
+  {% elif kind == 'clouds' or kind == 'unknown' %}
+  <g class="cloud-a">
+    <path d="M150 160h120a32 32 0 0 0 0-64 44 44 0 0 0-84 12 28 28 0 0 0-36 52z" fill="url(#cloudFill)" stroke="#D3DCE3" stroke-width="1"/>
+  </g>
+  <g class="cloud-b" opacity=".9">
+    <path d="M40 196h80a22 22 0 0 0 0-44 30 30 0 0 0-57 8 19 19 0 0 0-23 36z" fill="url(#cloudFill)" stroke="#D3DCE3" stroke-width="1"/>
+  </g>
+  {% elif kind == 'storm' %}
+  <g class="cloud-c" opacity=".75">
+    <path d="M190 92h110a28 28 0 0 0 0-56 38 38 0 0 0-73 10 24 24 0 0 0-37 46z" fill="#B9B4C9"/>
+  </g>
+  <g class="cloud-a">
+    <path d="M70 150h150a38 38 0 0 0 0-76 52 52 0 0 0-100 14 33 33 0 0 0-50 62z" fill="url(#stormFill)"/>
+  </g>
+  <g class="rain" stroke="var(--monsoon)" stroke-width="4" stroke-linecap="round">
+    <line x1="100" y1="166" x2="92" y2="186"/><line x1="134" y1="166" x2="126" y2="190"/>
+    <line x1="168" y1="166" x2="160" y2="186"/><line x1="202" y1="166" x2="194" y2="190"/>
+  </g>
+  <g class="cloud-b" opacity=".9">
+    <path d="M250 200h70a19 19 0 0 0 0-38 26 26 0 0 0-50 7 16 16 0 0 0-20 31z" fill="#C9C4D8"/>
+  </g>
+  {% endif %}
+</svg>

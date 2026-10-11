@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Settings{% endblock %}
+
+
+{% block head %}
+<style>
+  .settings-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .settings-toc { position: sticky; top: 76px; display: grid; gap: 2px; }
+  .settings-toc a { padding: 7px 10px; border-radius: var(--r-sm); color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; }
+  .settings-toc a:hover { background: var(--surface); }
+  @media (max-width: 960px) { .settings-grid { grid-template-columns: 1fr; } .settings-toc { display: none; } }
+  .panel { scroll-margin-top: 76px; }
+  .panel > h2 { display: flex; align-items: center; gap: 8px; }
+  .panel > h2 svg { width: 19px; height: 19px; color: var(--monsoon); }
+  .panel > .lead { color: var(--slate); margin-top: -4px; }
+  .toggle-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .toggle-row:first-of-type { border-top: 0; }
+  .toggle-row .check { margin: 0; }
+  .switch { position: relative; width: 44px; height: 26px; flex: none; margin: 0; }
+  .switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .switch .track { position: absolute; inset: 0; border-radius: 13px; background: var(--line); transition: background .15s; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+  .switch input:checked + .track { background: var(--monsoon); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+  .switch input:focus-visible + .track { outline: 3px solid var(--saffron); outline-offset: 2px; }
+  .state-text { font-size: 13px; color: var(--slate); min-width: 24px; }
+  .radio-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 640px) { .radio-cards { grid-template-columns: 1fr; } }
+  .radio-card { position: relative; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px; cursor: pointer; margin: 0; font-weight: 400; display: block; }
+  .radio-card input { position: absolute; top: 14px; right: 14px; width: 18px; height: 18px; accent-color: var(--monsoon); }
+  .radio-card strong { display: block; font-size: 15px; margin-bottom: 2px; }
+  .radio-card span { font-size: 13px; color: var(--slate); }
+  .radio-card:has(input:checked) { border-color: var(--monsoon); background: var(--monsoon-soft); }
+  .alloc-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 64px; gap: 14px; align-items: center; padding: 8px 0; }
+  .alloc-row label { margin: 0; display: flex; align-items: center; gap: 8px; }
+  .alloc-row output { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  @media (max-width: 480px) { .alloc-row { grid-template-columns: 1fr 56px; } .alloc-row input { grid-column: 1 / -1; grid-row: 2; } }
+  .alloc-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); margin: 10px 0 8px; }
+  .alloc-bar span { display: block; height: 100%; transition: width .15s; }
+  .alloc-total { display: flex; align-items: center; gap: 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .alloc-total svg { width: 17px; height: 17px; }
+  .alloc-total.ok { color: var(--gain); } .alloc-total.bad { color: var(--loss); }
+  .th-group h3 { font-size: 15px; margin: 18px 0 2px; }
+  .th-group > p { font-size: 13px; color: var(--slate); margin-bottom: 4px; }
+  .th-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .th-row label { margin: 0; }
+  .th-row .hint { margin-top: 2px; }
+  .th-row .input-unit { position: relative; }
+  .th-row .input-unit input { padding-right: 52px; text-align: right; }
+  .th-row .unit { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--slate); pointer-events: none; }
+  .th-row .changed { font-size: 12px; color: color-mix(in srgb, var(--saffron) 70%, var(--ink)); font-weight: 600; }
+  @media (max-width: 560px) { .th-row { grid-template-columns: 1fr; gap: 6px; } }
+  .adv { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 14px; }
+  .adv > summary { display: flex; align-items: center; gap: 8px; }
+  .adv > summary svg { width: 17px; height: 17px; }
+  .env-list { list-style: none; padding: 0; margin: 0; }
+  .env-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+  .env-list li:first-child { border-top: 0; }
+  .env-list li > svg { width: 18px; height: 18px; margin-top: 2px; }
+  .env-list .set svg { color: var(--gain); }
+  .env-list .unset svg { color: var(--slate); }
+  .env-list .unset.req svg { color: var(--loss); }
+  .env-list code { font-size: 13px; font-weight: 600; }
+  .save-bar {
+    position: sticky; bottom: 12px; z-index: 10; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 12px 16px;
+  }
+  @media (max-width: 860px) { .save-bar { bottom: 78px; } }
+  .save-bar .status { font-size: 14px; color: var(--slate); margin-right: auto; }
+  .save-bar .status.dirty { color: color-mix(in srgb, var(--saffron) 70%, var(--ink)); font-weight: 600; }
+  .data-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set alloc = settings.target_allocation or {'equity': 70, 'debt': 20, 'international': 10} %}
+{% set th = settings.thresholds or {} %}
+{% set thd = settings.thresholds_default or {} %}
+{% set risk = settings.risk_profile or 'moderate' %}
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p>Choose how Mausam reports to you, what "worth watching" means for your funds, and how the app looks.</p>
+  </div>
+</div>
+
+<div class="settings-grid">
+  <nav class="settings-toc" aria-label="Settings sections">
+    <a href="#s-report">Weekly report and tips</a>
+    <a href="#s-risk">Risk profile</a>
+    <a href="#s-alloc">Target allocation</a>
+    <a href="#s-thresholds">Alert thresholds</a>
+    <a href="#s-look">Appearance</a>
+    <a href="#s-data">Your data</a>
+    <a href="#s-env">App configuration</a>
+  </nav>
+
+  <form id="settings-form" class="stack" novalidate onsubmit="return false">
+
+    {# ---- Report + tips ---- #}
+    <section class="panel" id="s-report" aria-labelledby="report-h">
+      <h2 id="report-h"><i data-lucide="mail" aria-hidden="true"></i>Weekly report and tips</h2>
+      <p class="lead">Your weather report is written every Saturday morning (about 07:30 IST) and emailed to you.</p>
+      <div class="field" style="max-width:480px">
+        <label for="report_email">Send my Saturday report to</label>
+        <input type="email" id="report_email" name="report_email" value="{{ settings.report_email or '' }}"
+               placeholder="{{ settings.effective_report_email or 'you@example.com' }}" autocomplete="email" aria-describedby="email-hint">
+        <div class="hint" id="email-hint">
+          {% if settings.report_email %}Reports go to this address.
+          {% elif settings.effective_report_email %}Leave empty to keep using the address set up for the app ({{ settings.effective_report_email }}).
+          {% else %}No email address is set yet, so reports are saved in the app but not emailed.{% endif %}
+        </div>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn btn-sm" type="button" id="test-email"><i data-lucide="send" aria-hidden="true"></i>Send test email</button>
+        <span class="hint" style="margin:0">Sends a short test message to the saved address. Save first if you changed it.</span>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <label for="report_enabled" style="margin:0">Saturday weather report</label>
+          <div class="hint">Write and email a plain-language report on your funds every Saturday.</div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:nowrap">
+          <span class="state-text" data-state-for="report_enabled" aria-hidden="true"></span>
+          <span class="switch"><input type="checkbox" role="switch" id="report_enabled" name="report_enabled" {% if settings.report_enabled is not sameas false %}checked{% endif %}><span class="track" aria-hidden="true"></span></span>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <label for="daily_tip_enabled" style="margin:0">Daily tip</label>
+          <div class="hint">Show "One thing to know today" on the Today page after each nightly refresh.</div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:nowrap">
+          <span class="state-text" data-state-for="daily_tip_enabled" aria-hidden="true"></span>
+          <span class="switch"><input type="checkbox" role="switch" id="daily_tip_enabled" name="daily_tip_enabled" {% if settings.daily_tip_enabled is not sameas false %}checked{% endif %}><span class="track" aria-hidden="true"></span></span>
+        </div>
+      </div>
+    </section>
+
+    {# ---- Risk profile ---- #}
+    <section class="panel" id="s-risk" aria-labelledby="risk-h">
+      <h2 id="risk-h"><i data-lucide="gauge" aria-hidden="true"></i>Risk profile</h2>
+      <p class="lead">How much ups and downs you're comfortable with. Mausam uses this only to set the tone of explanations; it never recommends funds.</p>
+      <fieldset style="border:0;padding:0;margin:0">
+        <legend class="sr-only">Risk profile</legend>
+        <div class="radio-cards">
+          {% for key, label, text in [
+              ('conservative', 'Conservative', 'Steadiness matters most. Big falls would worry me.'),
+              ('moderate', 'Moderate', 'Some swings are fine for better long-run growth.'),
+              ('aggressive', 'Aggressive', 'I can sit through large falls for the long run.')] %}
+          <label class="radio-card">
+            <input type="radio" name="risk_profile" value="{{ key }}" {% if risk == key %}checked{% endif %}>
+            <strong>{{ label }}</strong><span>{{ text }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+    </section>
+
+    {# ---- Target allocation ---- #}
+    <section class="panel" id="s-alloc" aria-labelledby="alloc-h">
+      <h2 id="alloc-h"><i data-lucide="pie-chart" aria-hidden="true"></i>Target {{ term('allocation', 'allocation') }}</h2>
+      <p class="lead">The mix you're aiming for. If your actual mix drifts too far from this, the Saturday report may say "Consider reviewing your allocation". The three parts must add up to 100%.</p>
+      {% for key, label, colour in [('equity', 'Equity (India)', 'var(--monsoon)'), ('debt', 'Debt', 'var(--saffron)'), ('international', 'International', 'var(--plum)')] %}
+      <div class="alloc-row">
+        <label for="alloc-{{ key }}"><span class="swatch" style="background:{{ colour }}" aria-hidden="true"></span>{{ label }}</label>
+        <input type="range" id="alloc-{{ key }}" data-key="{{ key }}" min="0" max="100" step="1" value="{{ (alloc.get(key) or 0)|round|int }}">
+        <output for="alloc-{{ key }}" id="alloc-{{ key }}-out">{{ (alloc.get(key) or 0)|round|int }}%</output>
+      </div>
+      {% endfor %}
+      <div class="alloc-bar" aria-hidden="true">
+        <span id="bar-equity" style="background:var(--monsoon)"></span>
+        <span id="bar-debt" style="background:var(--saffron)"></span>
+        <span id="bar-international" style="background:var(--plum)"></span>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <div class="alloc-total" id="alloc-total" aria-live="polite"></div>
+        <a href="/portfolio" class="small">See your current mix</a>
+      </div>
+    </section>
+
+    {# ---- Thresholds ---- #}
+    <section class="panel" id="s-thresholds" aria-labelledby="th-h">
+      <h2 id="th-h"><i data-lucide="sliders-horizontal" aria-hidden="true"></i>Alert thresholds</h2>
+      <p class="lead">These decide when Mausam calls a fund "lagging", when a move counts as "with the market", and when your mix has drifted. The defaults suit most people.</p>
+      <details class="adv" id="th-details">
+        <summary><i data-lucide="settings-2" aria-hidden="true"></i>Advanced: change thresholds</summary>
+        <p class="hint" style="margin-top:10px">Numbers are in {{ term('points', 'points') }}: the gap between two percentages. If your fund returned −2% and its benchmark −1%, the gap is 1 point.</p>
+        {% set groups = [
+          ('When is a fund lagging?', 'A fund is flagged as lagging for a week if it trails its benchmark (or category average) by more than this.', [
+            ('equity_week_lag_pp', 'Equity funds, over one week', 'Indian share funds: large, mid and small cap.', 'points'),
+            ('equity_month_lag_pp', 'Equity funds, over one month', 'A longer gap that also counts as lagging.', 'points'),
+            ('debt_week_lag_pp', 'Debt funds, over one week', 'Debt funds move slowly, so a small gap matters.', 'points'),
+            ('debt_month_lag_pp', 'Debt funds, over one month', '', 'points'),
+            ('intl_week_lag_pp', 'International funds, over one week', 'These swing more with US markets and the rupee.', 'points'),
+            ('intl_month_lag_pp', 'International funds, over one month', '', 'points')]),
+          ('When is a move "with the market"?', 'If a fund’s weekly move is within this many points of its benchmark, and in the same direction, Mausam labels it "Moved with the market". Bigger gaps are "Fund-specific".', [
+            ('market_wide_band_pp', 'Equity funds', '', 'points'),
+            ('debt_market_wide_band_pp', 'Debt funds', '', 'points'),
+            ('intl_market_wide_band_pp', 'International funds', '', 'points')]),
+          ('When should Mausam speak up?', '', [
+            ('consecutive_weeks_to_watch', 'Lagging weeks in a row before "worth watching"', 'One bad week is noise. This many lagging weeks in a row makes the verdict "One fund worth watching".', 'weeks'),
+            ('allocation_drift_pp', 'Allowed drift from your target mix', 'If equity, debt or international drifts more than this from your target, the verdict becomes "Consider reviewing your allocation".', 'points')])
+        ] %}
+        {% for title, intro, rows in groups %}
+        <div class="th-group">
+          <h3>{{ title }}</h3>
+          {% if intro %}<p>{{ intro }}</p>{% endif %}
+          {% for key, label, hint, unit in rows %}
+          <div class="th-row">
+            <div>
+              <label for="th-{{ key }}">{{ label }}</label>
+              <div class="hint" id="th-{{ key }}-hint">{% if hint %}{{ hint }} {% endif %}Default: {{ thd.get(key) }} {{ unit }}. <span class="changed" data-changed-for="{{ key }}" hidden>Changed from default</span></div>
+            </div>
+            <div class="input-unit">
+              <input type="number" id="th-{{ key }}" data-th="{{ key }}" data-default="{{ thd.get(key) }}"
+                     value="{{ th.get(key, thd.get(key)) }}" min="{{ 1 if unit == 'weeks' else 0 }}" max="{{ 52 if unit == 'weeks' else 100 }}"
+                     step="{{ 1 if unit == 'weeks' else 0.05 }}" inputmode="decimal" aria-describedby="th-{{ key }}-hint">
+              <span class="unit" aria-hidden="true">{{ 'wk' if unit == 'weeks' else 'pts' }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        <div class="row" style="margin-top:14px">
+          <button class="btn btn-sm" type="button" id="reset-th"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset to defaults</button>
+          <span class="hint" style="margin:0">Changes apply from the next report. Past reports stay as they were.</span>
+        </div>
+      </details>
+    </section>
+
+    {# ---- Appearance ---- #}
+    <section class="panel" id="s-look" aria-labelledby="look-h">
+      <h2 id="look-h"><i data-lucide="sun-moon" aria-hidden="true"></i>Appearance</h2>
+      <p class="lead">Saved on this device only, and applied straight away.</p>
+      <div class="segmented" role="group" aria-label="Colour theme" id="theme-choice">
+        <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+        <button type="button" data-theme-choice="system" aria-pressed="false">Match my device</button>
+      </div>
+    </section>
+
+    {# ---- Data ---- #}
+    <section class="panel" id="s-data" aria-labelledby="data-h">
+      <h2 id="data-h"><i data-lucide="download" aria-hidden="true"></i>Your data</h2>
+      <p class="lead">Download everything Mausam stores about you. It's your data; take it anywhere.</p>
+      <div class="data-actions">
+        <a class="btn" href="/api/export" download="mausam-export.json"><i data-lucide="file-json" aria-hidden="true"></i>Download everything (JSON)</a>
+        <a class="btn" href="/api/transactions/export.csv" download><i data-lucide="file-spreadsheet" aria-hidden="true"></i>Download transactions (CSV)</a>
+      </div>
+      <p class="hint" style="margin-top:10px">The JSON file includes your settings, funds, transactions, weekly snapshots, reports, alerts and chat messages. The CSV opens in Excel or Google Sheets.</p>
+    </section>
+
+    {# ---- Env ---- #}
+    <section class="panel" id="s-env" aria-labelledby="env-h">
+      <h2 id="env-h"><i data-lucide="key-round" aria-hidden="true"></i>App configuration</h2>
+      <p class="lead">Which settings were provided when the app was deployed. Values are secret and never shown; they're changed in Vercel's environment variables, not here.</p>
+      <ul class="env-list">
+        {% for c in config_status %}
+        <li class="{{ 'set' if c.set else 'unset' }}{{ ' req' if c.required else '' }}">
+          <i data-lucide="{{ 'circle-check' if c.set else ('circle-alert' if c.required else 'circle-minus') }}" aria-hidden="true"></i>
+          <div>
+            <code>{{ c.name }}</code>
+            <div class="hint" style="margin:2px 0 0">{{ c.description }}</div>
+          </div>
+          <div class="row" style="gap:6px;justify-content:flex-end">
+            {% if c.required %}<span class="chip">Required</span>{% endif %}
+            {% if c.set %}<span class="chip gain">Set</span>
+            {% elif c.required %}<span class="chip loss">Missing</span>
+            {% else %}<span class="chip">Not set (optional)</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <div class="save-bar">
+      <span class="status" id="save-status" aria-live="polite">All changes saved.</span>
+      <button class="btn" type="button" id="undo-btn" hidden>Undo changes</button>
+      <button class="btn btn-primary" type="button" id="save-btn"><i data-lucide="save" aria-hidden="true"></i>Save settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const M = window.Mausam;
+  const form = document.getElementById('settings-form');
+  const saveBtn = document.getElementById('save-btn');
+  const undoBtn = document.getElementById('undo-btn');
+  const status = document.getElementById('save-status');
+  const KEYS = ['equity', 'debt', 'international'];
+  let dirty = false;
+
+  // ---------- switches ----------
+  function syncSwitchText() {
+    M.$$('[data-state-for]').forEach((el) => {
+      el.textContent = document.getElementById(el.dataset.stateFor).checked ? 'On' : 'Off';
+    });
+  }
+
+  // ---------- allocation ----------
+  function allocValues() {
+    const out = {};
+    KEYS.forEach((k) => { out[k] = parseInt(document.getElementById('alloc-' + k).value, 10) || 0; });
+    return out;
+  }
+  function allocTotal() { const v = allocValues(); return v.equity + v.debt + v.international; }
+  function syncAlloc() {
+    const v = allocValues();
+    const total = v.equity + v.debt + v.international;
+    KEYS.forEach((k) => {
+      const el = document.getElementById('alloc-' + k);
+      document.getElementById(`alloc-${k}-out`).textContent = v[k] + '%';
+      el.setAttribute('aria-valuetext', `${v[k]} percent`);
+      el.setAttribute('aria-invalid', total === 100 ? 'false' : 'true');
+      document.getElementById('bar-' + k).style.width = (total ? (v[k] / Math.max(total, 100)) * 100 : 0) + '%';
+    });
+    const box = document.getElementById('alloc-total');
+    if (total === 100) {
+      box.className = 'alloc-total ok';
+      box.innerHTML = '<i data-lucide="circle-check" aria-hidden="true"></i>Total 100%. Good to save.';
+    } else {
+      const diff = total - 100;
+      box.className = 'alloc-total bad';
+      box.innerHTML = `<i data-lucide="circle-alert" aria-hidden="true"></i>Total ${total}%. ${diff > 0 ? 'Take away' : 'Add'} ${Math.abs(diff)} point${Math.abs(diff) === 1 ? '' : 's'} so it adds up to exactly 100%.`;
+    }
+    M.icons();
+    updateSaveState();
+  }
+
+  // ---------- thresholds ----------
+  function syncChanged() {
+    M.$$('[data-th]').forEach((inp) => {
+      const changed = parseFloat(inp.value) !== parseFloat(inp.dataset.default);
+      const tag = document.querySelector(`[data-changed-for="${inp.dataset.th}"]`);
+      if (tag) tag.hidden = !changed;
+    });
+  }
+  function thresholdValues() {
+    const out = {}; let bad = null;
+    M.$$('[data-th]').forEach((inp) => {
+      const v = parseFloat(inp.value);
+      const min = parseFloat(inp.min), max = parseFloat(inp.max);
+      const invalid = inp.value.trim() === '' || isNaN(v) || v < min || v > max;
+      inp.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      if (invalid && !bad) bad = inp;
+      out[inp.dataset.th] = v;
+    });
+    return { values: out, bad };
+  }
+
+  // ---------- save state ----------
+  function updateSaveState() {
+    const total = allocTotal();
+    saveBtn.disabled = total !== 100;
+    saveBtn.title = total !== 100 ? 'Target allocation must add up to 100% before you can save.' : '';
+    if (total !== 100) { status.textContent = `Can't save yet: target allocation adds up to ${total}%, not 100%.`; status.className = 'status dirty'; }
+    else if (dirty) { status.textContent = 'You have unsaved changes.'; status.className = 'status dirty'; }
+    else { status.textContent = 'All changes saved.'; status.className = 'status'; }
+    undoBtn.hidden = !dirty;
+  }
+  function markDirty() { dirty = true; updateSaveState(); }
+
+  form.addEventListener('input', (e) => {
+    if (e.target.closest('#theme-choice')) return;
+    if (e.target.matches('input[type=range]')) syncAlloc();
+    if (e.target.matches('[data-th]')) syncChanged();
+    if (e.target.matches('[role=switch]')) syncSwitchText();
+    markDirty();
+  });
+  form.addEventListener('change', (e) => { if (e.target.matches('[role=switch], [name=risk_profile]')) { syncSwitchText(); markDirty(); } });
+
+  function applySettings(s) {
+    document.getElementById('report_email').value = s.report_email || '';
+    if (s.effective_report_email) document.getElementById('report_email').placeholder = s.effective_report_email;
+    document.getElementById('report_enabled').checked = s.report_enabled !== false;
+    document.getElementById('daily_tip_enabled').checked = s.daily_tip_enabled !== false;
+    M.$$('[name=risk_profile]').forEach((r) => { r.checked = r.value === (s.risk_profile || 'moderate'); });
+    const a = s.target_allocation || { equity: 70, debt: 20, international: 10 };
+    KEYS.forEach((k) => { document.getElementById('alloc-' + k).value = Math.round(a[k] || 0); });
+    const th = s.thresholds || {};
+    M.$$('[data-th]').forEach((inp) => { if (th[inp.dataset.th] !== undefined) inp.value = th[inp.dataset.th]; });
+    syncSwitchText(); syncAlloc(); syncChanged();
+  }
+
+  saveBtn.addEventListener('click', () => {
+    if (allocTotal() !== 100) { M.toast('Target allocation must add up to 100% before saving.', 'error'); return; }
+    const emailEl = document.getElementById('report_email');
+    const email = emailEl.value.trim();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      emailEl.setAttribute('aria-invalid', 'true'); emailEl.focus();
+      M.toast("That email address doesn't look right. Check it and try again.", 'error');
+      return;
+    }
+    emailEl.setAttribute('aria-invalid', 'false');
+    const th = thresholdValues();
+    if (th.bad) {
+      document.getElementById('th-details').open = true;
+      th.bad.focus();
+      M.toast('One of the thresholds is empty or out of range. Fix the highlighted box, or reset to defaults.', 'error');
+      return;
+    }
+    const payload = {
+      report_email: email,
+      report_enabled: document.getElementById('report_enabled').checked,
+      daily_tip_enabled: document.getElementById('daily_tip_enabled').checked,
+      risk_profile: (document.querySelector('[name=risk_profile]:checked') || {}).value || 'moderate',
+      target_allocation: allocValues(),
+      thresholds: th.values,
+    };
+    M.busy(saveBtn, async () => {
+      try {
+        const s = await M.api('PUT', '/api/settings', payload);
+        applySettings(s);
+        dirty = false; updateSaveState();
+        M.toast('Settings saved.');
+      } catch (e) { M.toast(e.message, 'error'); }
+    }).then(updateSaveState);
+  });
+
+  undoBtn.addEventListener('click', () => location.reload());
+
+  document.getElementById('reset-th').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    const yes = await M.confirm('Reset thresholds to defaults?', 'All alert thresholds go back to Mausam\'s defaults. Your other settings are not changed.', 'Reset thresholds');
+    if (!yes) return;
+    M.busy(btn, async () => {
+      try {
+        const s = await M.api('PUT', '/api/settings', { thresholds: 'reset' });
+        M.$$('[data-th]').forEach((inp) => {
+          const v = (s.thresholds || {})[inp.dataset.th];
+          inp.value = v !== undefined ? v : inp.dataset.default;
+          inp.setAttribute('aria-invalid', 'false');
+        });
+        syncChanged();
+        M.toast('Thresholds reset to defaults.');
+      } catch (e) { M.toast(e.message, 'error'); }
+    });
+  });
+
+  document.getElementById('test-email').addEventListener('click', (ev) => {
+    const btn = ev.currentTarget;
+    M.busy(btn, async () => {
+      try {
+        const r = await M.api('POST', '/api/settings/test-email');
+        M.toast(`Test email sent to ${r.sent_to}. Check your inbox (and spam folder).`);
+      } catch (e) { M.toast(e.message, 'error'); }
+    });
+  });
+
+  // ---------- theme ----------
+  const root = document.documentElement;
+  function currentTheme() {
+    try { return localStorage.getItem('mausam-theme') || 'system'; } catch (e) { return root.getAttribute('data-theme') || 'system'; }
+  }
+  function syncThemeButtons() {
+    const t = currentTheme();
+    M.$$('[data-theme-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeChoice === t)));
+  }
+  M.$$('[data-theme-choice]').forEach((b) => b.addEventListener('click', () => {
+    const t = b.dataset.themeChoice;
+    if (t === 'system') {
+      root.removeAttribute('data-theme');
+      try { localStorage.removeItem('mausam-theme'); } catch (e) { /* private mode */ }
+    } else {
+      root.setAttribute('data-theme', t);
+      try { localStorage.setItem('mausam-theme', t); } catch (e) { /* private mode */ }
+    }
+    // Keep the top-bar sun/moon button in step.
+    const dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const tb = document.getElementById('theme-btn');
+    if (tb) tb.innerHTML = `<i data-lucide="${dark ? 'sun' : 'moon'}" aria-hidden="true"></i>`;
+    M.icons();
+    if (M.chartDefaults) M.chartDefaults();
+    document.dispatchEvent(new CustomEvent('mausam:theme'));
+    syncThemeButtons();
+  }));
+  // The top-bar button also changes the theme; reflect it here.
+  const tb = document.getElementById('theme-btn');
+  if (tb) tb.addEventListener('click', () => setTimeout(syncThemeButtons, 0));
+
+  syncSwitchText();
+  syncAlloc();
+  syncChanged();
+  syncThemeButtons();
+})();
+</script>
+{% endblock %}

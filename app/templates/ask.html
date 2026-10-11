@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Ask Mausam{% endblock %}
+
+{% block head %}
+<style>
+  .ask-panel { display: flex; flex-direction: column; padding: 18px; }
+  .ask-panel .chat { height: calc(100vh - 300px); min-height: 420px; }
+  @media (max-width: 860px) { .ask-panel .chat { height: calc(100vh - 330px); min-height: 380px; } }
+  .chat-log { padding: 4px 4px 12px; }
+  .msg-wrap { display: flex; flex-direction: column; gap: 3px; }
+  .msg-wrap.user { align-items: flex-end; }
+  .msg-wrap.assistant { align-items: flex-start; }
+  .msg-wrap .msg { max-width: min(78%, 680px); }
+  @media (max-width: 560px) { .msg-wrap .msg { max-width: 92%; } }
+  .msg-meta { font-size: 12px; color: var(--slate); padding: 0 4px; display: inline-flex; align-items: center; gap: 4px; }
+  .msg-meta svg { width: 13px; height: 13px; }
+  .typing { display: inline-flex; gap: 5px; align-items: center; padding: 14px 16px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--slate); opacity: .4; animation: blink 1.2s infinite ease-in-out; }
+  .typing span:nth-child(2) { animation-delay: .2s; }
+  .typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+  .starters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .starters button { cursor: pointer; font-family: inherit; }
+  .starters button:hover { border-color: var(--monsoon); color: var(--monsoon); }
+  .chat-input textarea { min-height: 46px; height: 46px; max-height: 160px; resize: none; line-height: 1.45; }
+  .chat-input .btn { height: 46px; flex: none; }
+  .chat-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .chat-empty { margin: auto; text-align: center; max-width: 420px; color: var(--slate); padding: 24px 12px; }
+  .chat-empty svg { width: 40px; height: 40px; color: var(--monsoon); margin-bottom: 8px; }
+  .chat-empty h2 { color: var(--ink); font-size: 19px; }
+  .ask-disclaimer { margin: 10px 0 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Ask Mausam</h1>
+    <p>Ask about your funds, this week's report or any money word. Mausam explains what happened; the decisions stay with you.</p>
+  </div>
+  <button class="btn btn-danger" type="button" id="clear-chat" {% if not history %}disabled{% endif %}>
+    <i data-lucide="trash-2" aria-hidden="true"></i>Clear chat
+  </button>
+</div>
+
+<section class="panel ask-panel" aria-label="Conversation with Mausam">
+  <div class="chat">
+    <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0">
+      <div class="chat-empty" id="chat-empty" {% if history %}hidden{% endif %}>
+        <i data-lucide="message-circle" aria-hidden="true"></i>
+        <h2>What would you like to understand?</h2>
+        <p>Try one of the questions below, or type your own. Answers use the same numbers you see in the app.</p>
+      </div>
+      {% for msg in history %}
+      <div class="msg-wrap {{ 'user' if msg.role == 'user' else 'assistant' }}">
+        <span class="sr-only">{{ 'You said' if msg.role == 'user' else 'Mausam said' }}:</span>
+        <div class="msg {{ 'user' if msg.role == 'user' else 'assistant' }}">{{ msg.content }}</div>
+        <span class="msg-meta">{{ msg.created_at|dt }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div id="limit-note" hidden>{{ m.notice('', 'warn', 'clock') }}</div>
+
+    <div class="starters" id="starters" aria-label="Suggested questions">
+      {% for s in starters %}
+      <button type="button" class="chip" data-q="{{ s }}">{{ s }}</button>
+      {% endfor %}
+    </div>
+
+    <form class="chat-input" id="chat-form" autocomplete="off">
+      <label for="chat-text" class="sr-only">Your question</label>
+      <textarea id="chat-text" name="message" maxlength="600" rows="1" placeholder="Ask about your funds, a term, or this week…" aria-describedby="chat-help"></textarea>
+      <button class="btn btn-primary" type="submit" id="send-btn"><i data-lucide="send" aria-hidden="true"></i><span>Send</span></button>
+    </form>
+    <div class="chat-foot">
+      <span class="hint" id="chat-help">Enter to send · Shift+Enter for a new line · <span id="char-count">0</span>/600</span>
+    </div>
+  </div>
+  <p class="disclaimer ask-disclaimer"><strong>Ask Mausam explains; it never tells you what to buy or sell. Not investment advice.</strong>
+    Answers are written by Gemini Flash using only your app's numbers, and checked by code before you see them (no advice, no promises, no made-up figures). You can ask 20 questions an hour.
+    New to a word? See <a href="/learn">Learn</a>.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const M = window.Mausam;
+  const log = document.getElementById('chat-log');
+  const empty = document.getElementById('chat-empty');
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-text');
+  const send = document.getElementById('send-btn');
+  const clearBtn = document.getElementById('clear-chat');
+  const limitNote = document.getElementById('limit-note');
+  const count = document.getElementById('char-count');
+  let waiting = false;
+
+  const scrollDown = () => { log.scrollTop = log.scrollHeight; };
+  const nowLabel = () => {
+    const d = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()} ${months[d.getMonth()]}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+
+  // Text is set with textContent, so HTML in answers is never interpreted; CSS keeps line breaks.
+  function addMessage(role, text, meta) {
+    empty.hidden = true;
+    const wrap = document.createElement('div');
+    wrap.className = `msg-wrap ${role}`;
+    const sr = document.createElement('span');
+    sr.className = 'sr-only';
+    sr.textContent = role === 'user' ? 'You said:' : 'Mausam said:';
+    const bubble = document.createElement('div');
+    bubble.className = `msg ${role}`;
+    bubble.textContent = text;
+    const m = document.createElement('span');
+    m.className = 'msg-meta';
+    m.textContent = meta || nowLabel();
+    wrap.append(sr, bubble, m);
+    log.appendChild(wrap);
+    scrollDown();
+    clearBtn.disabled = false;
+    return wrap;
+  }
+
+  function addTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap assistant';
+    wrap.id = 'typing';
+    wrap.innerHTML = '<div class="msg assistant typing" aria-label="Mausam is writing an answer" role="status"><span></span><span></span><span></span></div>';
+    log.appendChild(wrap);
+    scrollDown();
+    return wrap;
+  }
+
+  function autosize() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight + 2, 160) + 'px';
+    count.textContent = input.value.length;
+  }
+
+  function showLimit(message) {
+    limitNote.hidden = false;
+    limitNote.querySelector('.notice > div').textContent = message;
+  }
+
+  async function ask(question) {
+    question = (question || '').trim();
+    if (!question || waiting) return;
+    if (question.length > 600) { M.toast('Please keep questions under 600 characters.', 'error'); return; }
+    waiting = true;
+    limitNote.hidden = true;
+    const userWrap = addMessage('user', question);
+    input.value = ''; autosize();
+    const typing = addTyping();
+    send.setAttribute('aria-busy', 'true'); send.disabled = true;
+    try {
+      const data = await M.api('POST', '/api/chat', { message: question });
+      typing.remove();
+      const wrap = addMessage('assistant', data.answer || 'Sorry, I could not find an answer just now.');
+      if (data.guardrails_passed === false) {
+        wrap.querySelector('.msg-meta').innerHTML = '<i data-lucide="shield" aria-hidden="true"></i> Safe fallback answer · ' + M.esc(nowLabel());
+        M.icons();
+      }
+    } catch (e) {
+      typing.remove();
+      // Put the question back so it isn't lost, and remove the unanswered bubble.
+      userWrap.remove();
+      if (!log.querySelector('.msg-wrap')) { empty.hidden = false; clearBtn.disabled = true; }
+      input.value = question; autosize();
+      if (/20 questions|last hour|too many/i.test(e.message)) {
+        showLimit(e.message + ' Your question is still in the box, ready to send later.');
+      } else {
+        M.toast(e.message, 'error');
+      }
+    } finally {
+      waiting = false;
+      send.removeAttribute('aria-busy'); send.disabled = false;
+      input.focus();
+    }
+  }
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); ask(input.value); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); }
+  });
+  input.addEventListener('input', autosize);
+  M.$$('#starters button').forEach((b) => b.addEventListener('click', () => ask(b.dataset.q)));
+
+  clearBtn.addEventListener('click', async () => {
+    const yes = await M.confirm('Clear the whole chat?', 'This deletes every message in this conversation. It cannot be undone.', 'Clear chat');
+    if (!yes) return;
+    await M.busy(clearBtn, async () => {
+      try {
+        await M.api('DELETE', '/api/chat');
+        M.$$('.msg-wrap', log).forEach((w) => w.remove());
+        empty.hidden = false;
+        limitNote.hidden = true;
+        M.toast('Chat cleared.');
+      } catch (e) { M.toast(e.message, 'error'); }
+    });
+    clearBtn.disabled = !log.querySelector('.msg-wrap');
+  });
+
+  scrollDown();
+  autosize();
+})();
+</script>
+{% endblock %}

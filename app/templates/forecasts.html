@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Forecasts{% endblock %}
+
+{% block head %}
+<style>
+  .fund-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .fund-picker a { border-left: 4px solid var(--fund, var(--monsoon)); }
+  .fund-picker a[aria-current="page"] { background: var(--monsoon-soft); border-color: var(--monsoon); border-left-color: var(--fund, var(--monsoon)); color: var(--ink); }
+  .range-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .range-card .range { font-family: var(--font-head); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; margin: 4px 0 6px; }
+  .range-card .range .to { color: var(--slate); font-weight: 400; padding: 0 4px; }
+  .acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin: 14px 0; }
+  .acc-grid .stat-value { font-size: 24px; }
+  .model-table tr.hybrid td { font-weight: 600; background: color-mix(in srgb, var(--monsoon-soft) 55%, transparent); }
+  .model-card dl { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 10px 18px; margin: 0; }
+  .model-card dt { font-weight: 600; font-size: 14px; color: var(--slate); }
+  .model-card dd { margin: 0; font-size: 14px; }
+  .model-card ul { margin: 0; padding-left: 18px; }
+  @media (max-width: 560px) { .model-card dl { grid-template-columns: 1fr; gap: 2px; } .model-card dd { margin-bottom: 10px; } }
+  .explain { font-size: 16px; line-height: 1.55; }
+  .whatif-out { font-size: 15px; }
+  .whatif-out .big { font-family: var(--font-head); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend-note { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--slate); margin-top: 6px; }
+  .legend-note .swatch { margin-right: 6px; vertical-align: -1px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# ---------- helpers ---------- #}
+{% macro chg(v, base) -%}
+{% if v is none or not base %}<span class="num muted">–</span>{% else %}{{ ((v / base - 1) * 100)|pct(1) }}{% endif %}
+{%- endmacro %}
+{% macro share(v) -%}
+{% if v is none %}–{% else %}{{ '%.0f'|format(v * 100 if v|abs <= 1 else v) }}%{% endif %}
+{%- endmacro %}
+{% macro skill(v) -%}
+{% if v is none %}<span class="muted">–</span>{% else %}{% set s = v * 100 %}<span class="num {{ 'gain' if s > 0 else 'loss' }}">{{ '▲ +' if s > 0 else '▼ −' }}{{ '%.0f'|format(s|abs) }}%</span>{% endif %}
+{%- endmacro %}
+{% macro rupees(v) -%}{% if v is none %}–{% else %}₹{{ v|num(2) }}{% endif %}{%- endmacro %}
+
+{% set model_labels = {'naive': 'Naive: NAV stays the same', 'naive_drift': 'Naive with drift: keeps its recent trend',
+                       'arima': 'ARIMA', 'ridge': 'Ridge Regression', 'hybrid': 'Hybrid (Mausam’s model)'} %}
+{% set fc7 = none %}{% set fc30 = none %}{% set mx = {} %}
+{% if bundle %}
+  {% set fc7 = (bundle.forecasts|selectattr('horizon_days', 'equalto', 7)|list|first) or none %}
+  {% set fc30 = (bundle.forecasts|selectattr('horizon_days', 'equalto', 30)|list|first) or none %}
+  {% for r in bundle.metrics %}{% set _ = mx.update({r.model ~ '_' ~ r.horizon_days: r}) %}{% endfor %}
+{% endif %}
+{% set main = fc30 or fc7 %}
+{% set h7 = mx.get('hybrid_7') %}{% set h30 = mx.get('hybrid_30') %}
+{% set hm = h30 or h7 %}
+
+{# The NAV the forecast starts from: last NAV on or before the run date. #}
+{% set ns = namespace(base=none, base_date=none) %}
+{% set run_iso = bundle.run_date.isoformat() if bundle and bundle.run_date else none %}
+{% for p in history %}{% if run_iso is none or p[0] <= run_iso %}{% set ns.base = p[1] %}{% set ns.base_date = p[0] %}{% endif %}{% endfor %}
+{% if ns.base is none and history %}{% set ns.base = history[-1][1] %}{% set ns.base_date = history[-1][0] %}{% endif %}
+{% set fname = (fund.short_name or fund.scheme_name) if fund else ('Scheme ' ~ code) %}
+
+<div class="page-head">
+  <div>
+    <h1>Forecasts</h1>
+    <p>A {{ term('forecast range', 'forecast range') }} shows where a fund's {{ term('nav', 'NAV') }} could land in the next few weeks, together with an honest record of how often our past ranges were right.</p>
+  </div>
+</div>
+
+{{ m.notice('<strong>Educational estimate, not a guarantee or advice.</strong> Ranges come from past NAV patterns. Markets can move outside them, and Mausam never uses forecasts to tell you what to do or to set the weekly verdict.'|safe, 'warn', 'info') }}
+
+{% if not funds and not code %}
+<div class="panel" style="margin-top:20px">
+  {{ m.empty('list-plus', 'Add a fund first', 'Forecasts are made for the funds in your list. Add one on the Manage funds page.', '/manage', 'Add a fund') }}
+</div>
+{% else %}
+
+<nav class="fund-picker" aria-label="Choose a fund" style="margin-top:20px">
+  {% for f in funds %}
+  <a class="btn btn-sm" href="/forecasts?code={{ f.scheme_code }}" style="--fund: {{ f.colour or 'var(--monsoon)' }}" {% if f.scheme_code == code %}aria-current="page"{% endif %}>{{ f.short_name or f.scheme_name }}</a>
+  {% endfor %}
+  {% if code and not fund %}<a class="btn btn-sm" href="/forecasts?code={{ code }}" aria-current="page">Scheme {{ code }}</a>{% endif %}
+</nav>
+
+<div class="stack">
+
+  {# ---------- Chart ---------- #}
+  <section class="panel" aria-labelledby="chart-h">
+    <div class="panel-head">
+      <h2 id="chart-h">{{ fname }}: the last 6 months and the next 30 trading days</h2>
+      {% if bundle %}<span class="small muted">Model run {{ bundle.run_date|d }}</span>{% endif %}
+    </div>
+    <div class="chart-box lg">
+      <canvas id="fc-chart" role="img" aria-label="Line chart of {{ fname }} NAV over the last 6 months{% if main %}, with shaded 80% and 95% ranges for the next 30 trading days{% endif %}."></canvas>
+    </div>
+    <div class="legend-note" aria-hidden="true">
+      <span><span class="swatch" style="background:var(--monsoon)"></span>Past NAV</span>
+      {% if main %}
+      <span><span class="swatch" style="background:color-mix(in srgb, var(--monsoon) 35%, transparent)"></span>80% range: where the NAV lands 4 times out of 5</span>
+      <span><span class="swatch" style="background:color-mix(in srgb, var(--monsoon) 14%, transparent)"></span>95% range: wider, for unusual weeks</span>
+      <span><span class="swatch" style="background:var(--slate)"></span>Middle of the range (not a prediction of the exact price)</span>
+      {% endif %}
+    </div>
+    <p class="chart-summary">
+      {% if history %}Over the last 6 months the NAV went from ₹{{ history[0][1]|num(2) }} ({{ history[0][0]|d }}) to ₹{{ history[-1][1]|num(2) }} ({{ history[-1][0]|d }}).{% else %}No NAV history is stored for this fund yet.{% endif %}
+      {% if fc30 %} For the next 30 trading days (to about {{ fc30.target_date|d }}), the 80% range is ₹{{ fc30.lo80|num(2) }} to ₹{{ fc30.hi80|num(2) }}.{% endif %}
+    </p>
+  </section>
+
+  {% if not bundle %}
+  {# ---------- No forecast yet ---------- #}
+  <section class="panel">
+    {{ m.empty('cloud-moon', 'No forecast for this fund yet', 'Forecasts are made by a machine-learning job that runs every Friday night in GitHub Actions (it needs more computing power than the website has). New funds get their first range after the next run.') }}
+    <div class="row" style="justify-content:center;margin-top:-16px">
+      {% if repo %}<a class="btn" href="https://github.com/{{ repo }}/actions" target="_blank" rel="noopener"><i data-lucide="github" aria-hidden="true"></i>See the ML job on GitHub Actions</a>{% endif %}
+    </div>
+    {% if last_run %}
+    <p class="small muted" style="text-align:center;margin-top:14px">Last ML run: {{ last_run.started_at|dt }}, status: {{ last_run.status or 'unknown' }}.</p>
+    {% endif %}
+  </section>
+  {% else %}
+
+  {# ---------- Range cards ---------- #}
+  <section aria-labelledby="ranges-h">
+    <h2 id="ranges-h" class="sr-only">Likely ranges</h2>
+    <div class="range-grid">
+      {% for fc in [fc7, fc30] if fc %}
+      <div class="panel range-card">
+        <div class="stat-label">Next {{ fc.horizon_days }} trading days{% if fc.target_date %} · to about {{ fc.target_date|d }}{% endif %}</div>
+        <div class="range">{{ rupees(fc.lo80) }}<span class="to">to</span>{{ rupees(fc.hi80) }}</div>
+        <div class="stat-sub">{{ chg(fc.lo80, ns.base) }} to {{ chg(fc.hi80, ns.base) }} from the NAV of ₹{{ ns.base|num(2) }} on {{ ns.base_date|d('short') }}</div>
+        <p class="small muted" style="margin:8px 0 0">80% range: the NAV should land here about 4 times out of 5.
+          {% if fc.lo95 is not none and fc.hi95 is not none %}Wider 95% range: {{ rupees(fc.lo95) }} to {{ rupees(fc.hi95) }}.{% endif %}
+          {% if fc.point is not none %}Middle of the range: {{ rupees(fc.point) }}.{% endif %}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---------- What if: value of her holding ---------- #}
+  <section class="panel" aria-labelledby="whatif-h">
+    <div class="panel-head"><h2 id="whatif-h" style="font-size:17px">What could my holding be worth?</h2></div>
+    <div class="grid">
+      <div class="span-4">
+        <label for="wi-units">Units</label>
+        <input type="number" id="wi-units" min="0" step="0.0001" inputmode="decimal" value="{{ '%.4f'|format(units or 0) }}">
+        <p class="hint">{% if units %}You hold {{ units|num(4) }} units of this fund. Change the number to try other amounts.{% else %}You don't hold units of this fund yet. Type a number to try it out.{% endif %}</p>
+      </div>
+      <div class="span-8 whatif-out" id="wi-out" aria-live="polite"></div>
+    </div>
+    <p class="small muted" style="margin:6px 0 0">Units × the NAV range = the possible value range. This is arithmetic on an estimate, not a promise.</p>
+  </section>
+
+  {# ---------- Accuracy ---------- #}
+  <section class="panel" aria-labelledby="acc-h">
+    <div class="panel-head"><h2 id="acc-h">How accurate have our ranges been?</h2>
+      {% if hm and hm.n_origins %}<span class="small muted">Tested at {{ hm.n_origins }} past dates over the last 12 months</span>{% endif %}</div>
+
+    {% if (h7 and h7.skill_vs_naive is not none and h7.skill_vs_naive <= 0) or (h30 and h30.skill_vs_naive is not none and h30.skill_vs_naive <= 0) %}
+    <div class="notice warn" role="note" style="margin-bottom:14px">
+      <i data-lucide="alert-circle" aria-hidden="true"></i>
+      <div>
+        <p style="margin:0"><strong>For this fund, our model hasn't beaten a simple 'stays the same' guess. Treat the range as a rough idea of how much it can move.</strong></p>
+        <p class="small" style="margin:4px 0 0">This is common for funds that move a lot, like equity funds. Short-term NAV moves are mostly unpredictable, and we'd rather tell you that than pretend otherwise.{% if h7 and h30 and ((h7.skill_vs_naive or 0) > 0) != ((h30.skill_vs_naive or 0) > 0) %} It applies to the {{ '7-day' if (h7.skill_vs_naive or 0) <= 0 else '30-day' }} range.{% endif %}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if hm %}
+    <div class="acc-grid">
+      {% for h, row in [(7, h7), (30, h30)] if row %}
+      <div class="stat">
+        <span class="stat-label">{{ h }}-day skill vs a "stays the same" guess</span>
+        <span class="stat-value">{{ skill(row.skill_vs_naive) }}</span>
+        <span class="stat-sub small">{% if row.skill_vs_naive is none %}Not enough tests yet.{% elif row.skill_vs_naive > 0 %}Our typical miss was {{ '%.0f'|format(row.skill_vs_naive * 100) }}% smaller than just assuming the NAV stays put.{% else %}Our typical miss was no smaller than just assuming the NAV stays put.{% endif %}</span>
+      </div>
+      {% endfor %}
+      {% if hm.coverage80 is not none %}
+      <div class="stat">
+        <span class="stat-label">80% range hit rate ({{ hm.horizon_days }} days)</span>
+        <span class="stat-value">{{ share(hm.coverage80) }}</span>
+        <span class="stat-sub small">Our ranges contained the real NAV {{ share(hm.coverage80) }} of the time. We aim for about 80%.</span>
+      </div>
+      {% endif %}
+      {% if hm.mae is not none %}
+      <div class="stat">
+        <span class="stat-label">Average miss, {{ term('nav', 'NAV') }} ({{ hm.horizon_days }} days)</span>
+        <span class="stat-value">₹{{ hm.mae|num(2) }}</span>
+        <span class="stat-sub small">How far the middle of the range was from the real NAV, on average{% if hm.mape is not none %} (about {{ '%.1f'|format(hm.mape) }}% of the NAV){% endif %}.</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div id="bt-wrap" hidden>
+      <div class="panel-head" style="margin:18px 0 8px">
+        <h3 style="font-size:15px">Past tests: our range vs what really happened</h3>
+        <div class="segmented" role="group" aria-label="Forecast length" id="bt-toggle"></div>
+      </div>
+      <div class="chart-box sm"><canvas id="bt-chart" role="img" aria-label="Backtest chart: past forecast ranges compared with the actual NAV at each test date."></canvas></div>
+      <p class="chart-summary" id="bt-summary"></p>
+    </div>
+  </section>
+
+  {# ---------- Gemini explanation ---------- #}
+  {% set explanation = (fc30.explanation if fc30 and fc30.explanation else (fc7.explanation if fc7 else none)) %}
+  {% if explanation %}
+  <section class="panel tip-card" aria-labelledby="exp-h">
+    <h2 id="exp-h" style="font-size:17px">In plain words</h2>
+    <p class="explain" style="margin:0">{{ explanation }}</p>
+    <p class="small muted" style="margin:8px 0 0">Written by Gemini Flash from the numbers on this page and checked by Mausam's code.</p>
+  </section>
+  {% endif %}
+
+  {# ---------- Model comparison ---------- #}
+  {% if bundle.metrics %}
+  <section class="panel" aria-labelledby="cmp-h">
+    <div class="panel-head"><h2 id="cmp-h">How the models compare</h2></div>
+    <p class="small muted">Every model was tested on past data it had never seen. Lower average miss is better; skill above zero means it beat the simple "stays the same" guess.</p>
+    {% for h in [7, 30] %}
+    {% set any_row = mx.get('hybrid_' ~ h) or mx.get('naive_' ~ h) or mx.get('arima_' ~ h) %}
+    {% if any_row %}
+    <h3 style="font-size:15px;margin-top:16px">Over {{ h }} trading days</h3>
+    <div class="table-wrap">
+      <table class="model-table">
+        <thead><tr>
+          <th scope="col">Model</th>
+          <th scope="col" class="num"><span data-tip="Mean absolute error: how far the middle estimate was from the real NAV, in rupees of NAV.">Average miss (₹)</span></th>
+          <th scope="col" class="num"><span data-tip="Mean absolute percentage error: the average miss as a percent of the NAV.">Average miss (%)</span></th>
+          <th scope="col" class="num"><span data-tip="How often the model got the direction (up or down) right.">Direction right</span></th>
+          <th scope="col" class="num"><span data-tip="1 minus (this model's average miss ÷ the naive model's average miss). Above zero beats the 'stays the same' guess.">Skill vs naive</span></th>
+          <th scope="col" class="num"><span data-tip="How often the real NAV landed inside the model's 80% range. Close to 80% is best.">80% range hit rate</span></th>
+        </tr></thead>
+        <tbody>
+        {% for key in ['naive', 'naive_drift', 'arima', 'ridge', 'hybrid'] %}
+          {% set r = mx.get(key ~ '_' ~ h) %}
+          {% if r %}
+          <tr class="{{ 'hybrid' if key == 'hybrid' else '' }}">
+            <th scope="row" style="font-weight:{{ 600 if key == 'hybrid' else 500 }};color:var(--ink);white-space:normal">{{ model_labels[key] }}</th>
+            <td class="num">{{ r.mae|num(3) if r.mae is not none else '–' }}</td>
+            <td class="num">{{ ('%.2f'|format(r.mape) ~ '%') if r.mape is not none else '–' }}</td>
+            <td class="num">{{ share(r.directional_accuracy) }}</td>
+            <td class="num">{% if key == 'naive' %}<span class="muted">baseline</span>{% else %}{{ skill(r.skill_vs_naive) }}{% endif %}</td>
+            <td class="num">{{ share(r.coverage80) if r.coverage80 is not none else '–' }}</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {# ---------- Model card ---------- #}
+  <section class="panel model-card" aria-labelledby="card-h">
+    <div class="panel-head"><h2 id="card-h">Model card</h2><span class="chip warn">Educational estimate, not a guarantee or advice</span></div>
+    <dl>
+      <dt>Data used</dt>
+      <dd>Daily {{ term('nav', 'NAV') }} history for this fund from mfapi.in (up to 3 years), plus its {{ term('benchmark', 'benchmark') }} and {{ term('category average', 'category average') }} returns as extra clues. No news, no opinions.</dd>
+      <dt>Method</dt>
+      <dd>Hybrid ARIMA (AutoRegressive Integrated Moving Average) + Ridge Regression. ARIMA learns the fund's own rhythm; Ridge Regression looks at recent momentum, volatility and the market. The two are blended, and the range widths are tuned so that past 80% ranges really held about 80% of the time.</dd>
+      <dt>Blend</dt>
+      <dd>
+        {% for fc in [fc7, fc30] if fc %}
+          {% if fc.hybrid_weight_arima is not none %}{{ fc.horizon_days }} days: {{ '%.0f'|format(fc.hybrid_weight_arima * 100) }}% ARIMA, {{ '%.0f'|format((1 - fc.hybrid_weight_arima) * 100) }}% Ridge.{% else %}{{ fc.horizon_days }} days: blend not recorded.{% endif %}
+        {% endfor %}
+        <span class="muted small">Chosen by whichever mix had the smallest miss in past tests.</span>
+      </dd>
+      {% if main and main.arima_order %}
+      <dt>ARIMA settings</dt>
+      <dd>Order {{ main.arima_order }} <span class="muted small">(how many past days and past surprises the model looks at, picked automatically)</span></dd>
+      {% endif %}
+      <dt>Last run</dt>
+      <dd>{{ bundle.run_date|d }}{% if last_run %} <span class="muted small">(latest ML job: {{ last_run.started_at|dt }}, {{ last_run.status or 'unknown' }})</span>{% endif %}. Runs every Friday night in GitHub Actions.</dd>
+      <dt>Track record</dt>
+      <dd>
+        {% if hm %}
+          Skill vs naive: {% for h, row in [(7, h7), (30, h30)] if row %}{{ h }} days {{ skill(row.skill_vs_naive) }}{{ '; ' if not loop.last }}{% endfor %}.
+          80% range hit rate: {{ share(hm.coverage80) }}{% if hm.n_origins %}, from {{ hm.n_origins }} monthly tests over the last year{% endif %}.
+        {% else %}Not enough past tests yet.{% endif %}
+      </dd>
+      <dt>Limitations</dt>
+      <dd><ul>
+        <li>Short-term fund prices are mostly random. For many equity funds no model beats "stays the same".</li>
+        <li>It only knows the past. Sudden events (elections, rate changes, global shocks) can push the NAV outside both ranges.</li>
+        <li>About 1 time in 5 the NAV should land outside the 80% range, by design.</li>
+        <li>It never changes the weekly verdict and is not a reason to buy or sell.</li>
+      </ul></dd>
+      {% if repo %}
+      <dt>Code</dt>
+      <dd><a href="https://github.com/{{ repo }}/actions" target="_blank" rel="noopener">ML job runs on GitHub Actions</a></dd>
+      {% endif %}
+    </dl>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+
+{% set bt = {} %}
+{% for h in [7, 30] %}
+  {% set r = mx.get('hybrid_' ~ h) %}
+  {% if r and r.details %}{% set _ = bt.update({'h' ~ h: r.details}) %}{% endif %}
+{% endfor %}
+{{ m.json_data('fc-data', {'history': history, 'fc7': fc7, 'fc30': fc30, 'base': ns.base, 'base_date': ns.base_date,
+                           'backtest': bt, 'name': fname}) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const D = Mausam.data('fc-data') || {};
+  const P = Mausam.palette();
+  const num = (v) => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
+  const r2 = (v) => v === null ? '–' : '₹' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const parseMaybe = (v) => { if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } } return v; };
+
+  // ---------- forecast path (defensive about its shape) ----------
+  function pathOf(fc) {
+    if (!fc) return [];
+    let p = parseMaybe(fc.path);
+    if (p && !Array.isArray(p) && Array.isArray(p.points)) p = p.points;
+    if (!Array.isArray(p)) return [];
+    return p.map((r) => ({
+      x: r && (r.date || r.d || r.target_date),
+      mid: num(r && (r.median ?? r.point ?? r.mid ?? r.mean)),
+      lo80: num(r && r.lo80), hi80: num(r && r.hi80), lo95: num(r && r.lo95), hi95: num(r && r.hi95),
+    })).filter((r) => r.x && r.lo80 !== null && r.hi80 !== null).sort((a, b) => String(a.x).localeCompare(String(b.x)));
+  }
+  function bandPoints() {
+    const base = num(D.base);
+    let pts = pathOf(D.fc30);
+    if (!pts.length) pts = pathOf(D.fc7);
+    if (!pts.length) {
+      // No daily path stored: draw straight bands from today's NAV to the 7- and 30-day ranges.
+      [D.fc7, D.fc30].forEach((fc) => {
+        if (fc && fc.target_date && num(fc.lo80) !== null) pts.push({ x: fc.target_date, mid: num(fc.point),
+          lo80: num(fc.lo80), hi80: num(fc.hi80), lo95: num(fc.lo95), hi95: num(fc.hi95) });
+      });
+    }
+    if (pts.length && base !== null && D.base_date && String(pts[0].x) > String(D.base_date)) {
+      pts.unshift({ x: D.base_date, mid: base, lo80: base, hi80: base, lo95: base, hi95: base });
+    }
+    return pts;
+  }
+
+  // ---------- main chart ----------
+  const hist = (D.history || []).map(([x, y]) => ({ x, y: num(y) }));
+  const band = bandPoints();
+  const fill = (key) => band.map((p) => ({ x: p.x, y: p[key] }));
+  const has95 = band.some((p) => p.lo95 !== null && p.hi95 !== null);
+  const datasets = [];
+  if (band.length) {
+    if (has95) {
+      datasets.push({ label: '95% range', data: fill('hi95'), borderWidth: 0, pointRadius: 0, fill: '+1',
+        backgroundColor: Mausam.alpha(P.monsoon, 0.12), borderColor: 'transparent', spanGaps: true });
+      datasets.push({ label: '_lo95', data: fill('lo95'), borderWidth: 0, pointRadius: 0, fill: false, borderColor: 'transparent', spanGaps: true });
+    }
+    datasets.push({ label: '80% range', data: fill('hi80'), borderWidth: 0, pointRadius: 0, fill: '+1',
+      backgroundColor: Mausam.alpha(P.monsoon, 0.28), borderColor: 'transparent' });
+    datasets.push({ label: '_lo80', data: fill('lo80'), borderWidth: 0, pointRadius: 0, fill: false, borderColor: 'transparent' });
+    if (band.some((p) => p.mid !== null)) {
+      datasets.push({ label: 'Middle of the range', data: fill('mid'), borderColor: P.slate, borderWidth: 1.2,
+        borderDash: [5, 4], pointRadius: 0, fill: false, spanGaps: true });
+    }
+  }
+  datasets.push({ label: 'Past NAV', data: hist, borderColor: P.monsoon, borderWidth: 2, pointRadius: 0, fill: false, tension: 0.15 });
+
+  if (hist.length || band.length) {
+    Mausam.chart('fc-chart', {
+      type: 'line',
+      data: { datasets },
+      options: {
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        scales: {
+          x: Mausam.timeScale(),
+          y: { grace: '4%', ticks: { callback: (v) => '₹' + Number(v).toLocaleString('en-IN') } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: (item) => !item.dataset.label.startsWith('_'),
+            callbacks: {
+              label: (ctx) => {
+                const lbl = ctx.dataset.label;
+                const p = band[ctx.dataIndex];
+                if (lbl === '80% range' && p) return `80% range: ${r2(p.lo80)} to ${r2(p.hi80)}`;
+                if (lbl === '95% range' && p) return `95% range: ${r2(p.lo95)} to ${r2(p.hi95)}`;
+                return `${lbl}: ${r2(ctx.parsed.y)}`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ---------- what-if value range ----------
+  const unitsEl = document.getElementById('wi-units');
+  const out = document.getElementById('wi-out');
+  function renderWhatIf() {
+    if (!unitsEl || !out) return;
+    const u = num(unitsEl.value);
+    const base = num(D.base);
+    if (u === null || u <= 0) { out.innerHTML = '<p class="muted">Enter a number of units above 0 to see a value range.</p>'; return; }
+    const rows = [D.fc7, D.fc30].filter((fc) => fc && num(fc.lo80) !== null).map((fc) => {
+      const lo = u * num(fc.lo80), hi = u * num(fc.hi80);
+      const lo95 = num(fc.lo95) !== null ? u * num(fc.lo95) : null, hi95 = num(fc.hi95) !== null ? u * num(fc.hi95) : null;
+      return `<div style="margin-bottom:10px"><div class="muted small">In about ${fc.horizon_days} trading days (80% range)</div>
+        <div class="big">${Mausam.inr(lo)} <span class="muted" style="font-weight:400">to</span> ${Mausam.inr(hi)}</div>
+        ${lo95 !== null ? `<div class="small muted">Wider 95% range: ${Mausam.inr(lo95)} to ${Mausam.inr(hi95)}</div>` : ''}</div>`;
+    });
+    const now = base !== null ? `<p class="small" style="margin:0 0 10px">Worth about <strong>${Mausam.inr(u * base)}</strong> at the NAV of ${r2(base)} on ${Mausam.date(D.base_date)}.</p>` : '';
+    out.innerHTML = now + (rows.join('') || '<p class="muted">No range to work with yet.</p>');
+  }
+  if (unitsEl) { unitsEl.addEventListener('input', renderWhatIf); renderWhatIf(); }
+
+  // ---------- backtest chart ----------
+  const bt = D.backtest || {};
+  const series = {};
+  ['h7', 'h30'].forEach((k) => {
+    let d = parseMaybe(bt[k]);
+    const rows = d && Array.isArray(d.backtest) ? d.backtest : [];
+    const clean = rows.map((r) => ({ x: r.target_date || r.origin, origin: r.origin, actual: num(r.actual), forecast: num(r.forecast),
+      lo80: num(r.lo80), hi80: num(r.hi80) })).filter((r) => r.x && r.actual !== null).sort((a, b) => String(a.x).localeCompare(String(b.x)));
+    if (clean.length) series[k] = clean;
+  });
+  const keys = Object.keys(series);
+  const wrap = document.getElementById('bt-wrap');
+  function drawBacktest(k) {
+    const rows = series[k];
+    const hasBand = rows.some((r) => r.lo80 !== null && r.hi80 !== null);
+    const ds = [];
+    if (hasBand) {
+      ds.push({ label: 'Our 80% range then', data: rows.map((r) => ({ x: r.x, y: r.hi80 })), fill: '+1', borderWidth: 0, pointRadius: 0,
+        backgroundColor: Mausam.alpha(P.monsoon, 0.22), borderColor: 'transparent', spanGaps: true });
+      ds.push({ label: '_lo', data: rows.map((r) => ({ x: r.x, y: r.lo80 })), fill: false, borderWidth: 0, pointRadius: 0, borderColor: 'transparent', spanGaps: true });
+    }
+    ds.push({ label: 'Middle of our range', data: rows.map((r) => ({ x: r.x, y: r.forecast })), borderColor: P.slate, borderDash: [5, 4],
+      borderWidth: 1.4, pointRadius: 3, pointStyle: 'rectRot', pointBackgroundColor: P.slate, fill: false, spanGaps: true });
+    ds.push({ label: 'Real NAV', data: rows.map((r) => ({ x: r.x, y: r.actual })), borderColor: P.ink, borderWidth: 1.6,
+      pointRadius: 3.5, pointBackgroundColor: P.ink, fill: false });
+    Mausam.chart('bt-chart', {
+      type: 'line', data: { datasets: ds },
+      options: {
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        scales: { x: Mausam.timeScale(), y: { grace: '4%', ticks: { callback: (v) => '₹' + Number(v).toLocaleString('en-IN') } } },
+        plugins: {
+          legend: { position: 'bottom', labels: { filter: (i) => !i.text.startsWith('_') } },
+          tooltip: { filter: (i) => !i.dataset.label.startsWith('_'), callbacks: {
+            label: (ctx) => {
+              const r = rows[ctx.dataIndex];
+              if (ctx.dataset.label.startsWith('Our 80%')) return `80% range: ${r2(r.lo80)} to ${r2(r.hi80)}`;
+              return `${ctx.dataset.label}: ${r2(ctx.parsed.y)}`;
+            } } },
+        },
+      },
+    });
+    const inside = rows.filter((r) => r.lo80 !== null && r.hi80 !== null && r.actual >= r.lo80 && r.actual <= r.hi80).length;
+    const banded = rows.filter((r) => r.lo80 !== null && r.hi80 !== null).length;
+    const h = k.slice(1);
+    document.getElementById('bt-summary').textContent =
+      `${rows.length} past ${h}-day tests. ` + (banded ? `The real NAV landed inside our 80% range ${inside} of ${banded} times (${Math.round(inside / banded * 100)}%). ` : '') +
+      'Each point is a date when we checked a forecast made earlier against the NAV that actually happened.';
+    document.querySelectorAll('#bt-toggle button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.k === k)));
+  }
+  if (keys.length && wrap) {
+    wrap.hidden = false;
+    const tg = document.getElementById('bt-toggle');
+    if (keys.length > 1) {
+      keys.forEach((k) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.k = k; b.textContent = `${k.slice(1)} days`;
+        b.addEventListener('click', () => drawBacktest(k));
+        tg.appendChild(b);
+      });
+    }
+    drawBacktest(keys.includes('h30') ? 'h30' : keys[0]);
+  }
+})();
+</script>
+{% endblock %}

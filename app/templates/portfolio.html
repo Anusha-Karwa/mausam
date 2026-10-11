@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Portfolio{% endblock %}
+
+{% block head %}
+<style>
+  .units-list { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 18px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); list-style: none; font-size: 14px; }
+  .units-list li { display: inline-flex; align-items: center; gap: 8px; }
+  .fund-cell { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+  .fund-cell a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  .fund-cell a:hover { color: var(--monsoon); text-decoration: underline; }
+  .fund-cell .sub { display: block; font-size: 12px; color: var(--slate); font-weight: 400; }
+  .holdings tfoot td { font-weight: 600; border-top: 2px solid var(--line); border-bottom: 0; }
+  .target-bars { display: grid; gap: 16px; margin-top: 18px; }
+  .tb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 14px; margin-bottom: 6px; }
+  .tb-head strong { font-weight: 600; }
+  .tb-track { position: relative; height: 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); }
+  .tb-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+  .tb-target { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1px; border-radius: 2px; background: var(--ink); }
+  .tb-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--slate); margin-top: 14px; }
+  .tb-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .tb-legend .mark { width: 3px; height: 12px; background: var(--ink); border-radius: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set AC_COLOURS = {'equity': 'var(--monsoon)', 'debt': 'var(--saffron)', 'international': 'var(--plum)'} %}
+<div class="stack">
+  <div class="page-head">
+    <div>
+      <h1>Your portfolio</h1>
+      <p>What you've put in, what it's worth now, and how it's spread across your funds.</p>
+    </div>
+    {% if summary.funds %}<a class="btn" href="/transactions"><i data-lucide="receipt" aria-hidden="true"></i>Record a transaction</a>{% endif %}
+  </div>
+
+  {% if not summary.funds %}
+    <div class="panel">{{ m.empty('wallet', 'Add your funds to see your portfolio', 'Add a fund by name or scheme code on the Manage funds page. Mausam fetches its full price history for you.', '/manage', 'Add a fund') }}</div>
+  {% elif not summary.has_transactions %}
+    <div class="panel">{{ m.empty('receipt', 'No investments recorded yet', 'Log your SIPs and purchases on the Transactions page. Your value, gains and allocation will appear here straight away.', '/transactions', 'Record a transaction') }}</div>
+  {% else %}
+
+  {# ---------- Summary row ---------- #}
+  <section class="panel" aria-labelledby="sum-h">
+    <h2 id="sum-h" class="sr-only">Summary</h2>
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-label">Invested</span>
+        <span class="stat-value">{{ summary.invested|inr }}</span>
+        <span class="stat-sub muted">money still in your funds</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Current value</span>
+        <span class="stat-value">{{ summary.value|inr }}</span>
+        <span class="stat-sub muted">on {{ summary.as_of|d }}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Gain</span>
+        <span class="stat-value">{{ summary.gain|money(signed=true) }}</span>
+        <span class="stat-sub muted">value minus invested</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Gain %</span>
+        <span class="stat-value">{{ summary.gain_pct|pct }}</span>
+        <span class="stat-sub muted">on what you invested</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">{{ term('xirr', 'XIRR') }}</span>
+        <span class="stat-value">{{ summary.xirr|pct(arrow=false) }}</span>
+        <span class="stat-sub muted">your yearly return</span>
+      </div>
+    </div>
+    <ul class="units-list" aria-label="Units you hold in each fund">
+      <li class="muted">Units held:</li>
+      {% for f in summary.funds %}
+      <li><span class="swatch" style="background:{{ f.colour or 'var(--monsoon)' }}" aria-hidden="true"></span>{{ f.name }} <span class="num">{{ f.units|num(3) }}</span></li>
+      {% endfor %}
+    </ul>
+    {% if summary.realised %}
+    <p class="small muted" style="margin:10px 0 0">You've also booked {{ summary.realised|money(signed=true) }} from units you sold. It isn't counted in the gain above.</p>
+    {% endif %}
+  </section>
+
+  {# ---------- Holdings table ---------- #}
+  <section class="panel" aria-labelledby="hold-h">
+    <div class="panel-head">
+      <h2 id="hold-h">Holdings</h2>
+      <span class="small muted">Click a column heading to sort</span>
+    </div>
+    <div class="table-wrap">
+      <table class="holdings" data-sortable>
+        <caption class="sr-only">Your holdings in each fund. Column headings sort the table.</caption>
+        <thead>
+          <tr>
+            <th data-sort="text" scope="col">Fund</th>
+            <th data-sort="text" scope="col">Type</th>
+            <th data-sort="num" scope="col" class="num">Units</th>
+            <th data-sort="num" scope="col" class="num">Avg cost {{ term('nav', 'NAV') }}</th>
+            <th data-sort="num" scope="col" class="num">Latest {{ term('nav', 'NAV') }}</th>
+            <th data-sort="num" scope="col" class="num">Invested</th>
+            <th data-sort="num" scope="col" class="num">Value</th>
+            <th data-sort="num" scope="col" class="num">Gain</th>
+            <th data-sort="num" scope="col" class="num">Gain %</th>
+            <th data-sort="num" scope="col" class="num">{{ term('xirr', 'XIRR') }}</th>
+            <th data-sort="num" scope="col" class="num">Weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in summary.funds %}
+          <tr>
+            <td data-value="{{ f.name }}">
+              <div class="fund-cell">
+                <span class="swatch" style="background:{{ f.colour or 'var(--monsoon)' }}" aria-hidden="true"></span>
+                <span><a href="/funds/{{ f.scheme_code }}">{{ f.name }}</a>
+                  <span class="sub">{{ f.fund.scheme_category or 'Category not known' }}</span></span>
+              </div>
+            </td>
+            <td data-value="{{ f.asset_class }}">{{ f.asset_class|asset }}</td>
+            <td class="num" data-value="{{ f.units }}">{{ f.units|num(3) }}</td>
+            <td class="num" data-value="{{ f.avg_cost_nav if f.avg_cost_nav is not none else '' }}">{% if f.avg_cost_nav is not none %}₹{{ f.avg_cost_nav|num(2) }}{% else %}–{% endif %}</td>
+            <td class="num" data-value="{{ f.nav if f.nav is not none else '' }}">{% if f.nav is not none %}₹{{ f.nav|num(2) }}<span class="sub muted small" style="display:block">{{ f.nav_date|d('short') }}</span>{% else %}–{% endif %}</td>
+            <td class="num" data-value="{{ f.invested }}">{{ f.invested|inr }}</td>
+            <td class="num" data-value="{{ f.value }}">{{ f.value|inr }}</td>
+            <td class="num" data-value="{{ f.gain }}">{{ f.gain|money(signed=true) }}</td>
+            <td class="num" data-value="{{ f.gain_pct if f.gain_pct is not none else '' }}">{{ f.gain_pct|pct }}</td>
+            <td class="num" data-value="{{ f.xirr if f.xirr is not none else '' }}">{{ f.xirr|pct(arrow=false) }}</td>
+            <td class="num" data-value="{{ f.weight }}">{{ f.weight|num(1) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total</td><td></td><td></td><td></td><td></td>
+            <td class="num">{{ summary.invested|inr }}</td>
+            <td class="num">{{ summary.value|inr }}</td>
+            <td class="num">{{ summary.gain|money(signed=true) }}</td>
+            <td class="num">{{ summary.gain_pct|pct }}</td>
+            <td class="num">{{ summary.xirr|pct(arrow=false) }}</td>
+            <td class="num">100%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="chart-summary">Avg cost NAV is what you paid per unit, on average, for the units you still hold. Gain does not include money from units you sold.</p>
+  </section>
+
+  {# ---------- Allocation ---------- #}
+  <div class="grid">
+    <section class="panel span-6" aria-labelledby="alloc-fund-h">
+      <div class="panel-head"><h2 id="alloc-fund-h">Split by fund</h2></div>
+      <div class="chart-box sm"><canvas id="alloc-fund" role="img" aria-label="Doughnut chart of how your money is split across funds"></canvas></div>
+      <p class="chart-summary" id="alloc-fund-sum"></p>
+    </section>
+
+    <section class="panel span-6" aria-labelledby="alloc-ac-h">
+      <div class="panel-head">
+        <h2 id="alloc-ac-h">Split by type: your {{ term('allocation', 'allocation') }}</h2>
+        <a class="small" href="/settings">Change targets</a>
+      </div>
+      <div class="chart-box sm"><canvas id="alloc-ac" role="img" aria-label="Doughnut chart of your money by type: equity, debt and international"></canvas></div>
+      <div class="target-bars" aria-label="Target versus actual allocation">
+        {% for k in ('equity', 'debt', 'international') %}
+          {% set actual = summary.allocation.get(k, 0) or 0 %}
+          {% set target = (summary.target.get(k, 0) or 0)|float %}
+          {% set drift = summary.drift.get(k) %}
+          <div>
+            <div class="tb-head">
+              <strong>{{ k|asset }}</strong>
+              <span class="small">
+                <span class="num">{{ actual|num(1) }}%</span> now · target <span class="num">{{ target|num(0) }}%</span> ·
+                {% if drift is none %}<span class="muted">–</span>
+                {% elif drift|abs < 0.5 %}<span class="num">on target</span>
+                {% else %}<span class="num" style="font-weight:600">{{ '▲ +' if drift > 0 else '▼ −' }}{{ drift|abs|num(1) }} pts {{ 'over' if drift > 0 else 'under' }}</span>{% endif %}
+              </span>
+            </div>
+            <div class="tb-track" role="img" aria-label="{{ k|asset }}: {{ actual|num(1) }} percent now, target {{ target|num(0) }} percent">
+              <div class="tb-fill" style="width:{{ [actual, 100]|min }}%;background:{{ AC_COLOURS[k] }}"></div>
+              <div class="tb-target" style="left:{{ [target, 100]|min }}%"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="tb-legend"><span><span class="swatch" style="background:var(--slate)"></span>Coloured bar: your actual share</span><span><span class="mark"></span>Your target</span></div>
+      <p class="chart-summary">
+        {% if summary.max_drift >= 5 %}
+          One type is {{ summary.max_drift|num(1) }} {{ term('points', 'points') }} away from your target. Many people {{ term('rebalancing', 'rebalance') }} when the gap passes about 5 points. That's your call, not a must.
+        {% else %}
+          Every type is within 5 {{ term('points', 'points') }} of your target. Nothing to rebalance.
+        {% endif %}
+      </p>
+    </section>
+  </div>
+
+  {# ---------- Over time + contribution ---------- #}
+  <div class="grid">
+    <section class="panel span-7" aria-labelledby="ivv-h">
+      <div class="panel-head"><h2 id="ivv-h">Invested vs value</h2><span class="small muted">rebuilt from your transactions</span></div>
+      {% if timeseries and timeseries|length >= 2 %}
+        <div class="chart-box"><canvas id="ivv" role="img" aria-label="Area chart of the money you invested compared with what it was worth, week by week"></canvas></div>
+        <p class="chart-summary" id="ivv-sum"></p>
+      {% else %}
+        {{ m.empty('trending-up', 'Not enough history yet', 'This chart fills in as your investments build up over a few weeks.') }}
+      {% endif %}
+    </section>
+    <section class="panel span-5" aria-labelledby="contrib-h">
+      <div class="panel-head"><h2 id="contrib-h">Which fund added most</h2></div>
+      <div class="chart-box"><canvas id="contrib" role="img" aria-label="Bar chart of the gain or loss from each fund in rupees"></canvas></div>
+      <p class="chart-summary" id="contrib-sum"></p>
+    </section>
+  </div>
+
+  {% set pf = [] %}
+  {% for f in summary.funds %}{% set _ = pf.append({'name': f.name, 'colour': f.colour, 'value': f.value, 'invested': f.invested, 'gain': f.gain, 'asset_class': f.asset_class}) %}{% endfor %}
+  {{ m.json_data('pf-funds', pf) }}
+  {{ m.json_data('pf-alloc', summary.allocation) }}
+  {{ m.json_data('pf-series', timeseries or []) }}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const funds = Mausam.data('pf-funds');
+  if (!funds) return;
+  const alloc = Mausam.data('pf-alloc') || {};
+  const series = Mausam.data('pf-series') || [];
+  const short = (v) => {
+    const a = Math.abs(v);
+    if (a >= 1e7) return (v < 0 ? '−' : '') + '₹' + (a / 1e7).toFixed(1) + ' Cr';
+    if (a >= 1e5) return (v < 0 ? '−' : '') + '₹' + (a / 1e5).toFixed(1) + ' L';
+    if (a >= 1e3) return (v < 0 ? '−' : '') + '₹' + (a / 1e3).toFixed(0) + 'k';
+    return Mausam.inr(v);
+  };
+  const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+
+  function render() {
+    const P = Mausam.palette();
+    funds.forEach((f, i) => { f.c = f.colour || P.fund[i % P.fund.length]; });
+
+    // Split by fund
+    const held = funds.filter((f) => f.value > 0);
+    const total = held.reduce((s, f) => s + f.value, 0);
+    Mausam.chart('alloc-fund', {
+      type: 'doughnut',
+      data: { labels: held.map((f) => f.name), datasets: [{ data: held.map((f) => f.value), backgroundColor: held.map((f) => f.c), borderColor: P.surface, borderWidth: 2 }] },
+      options: { cutout: '62%', plugins: { legend: { position: window.innerWidth < 560 ? 'bottom' : 'right' },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${Mausam.inr(c.raw)} (${total ? (c.raw / total * 100).toFixed(1) : 0}%)` } } } },
+    });
+    if (held.length) {
+      const big = held.slice().sort((a, b) => b.value - a.value)[0];
+      setText('alloc-fund-sum', `${big.name} is your largest holding at ${(big.value / total * 100).toFixed(1)}% of your money (${Mausam.inr(big.value)}).`);
+    }
+
+    // Split by asset class
+    const keys = ['equity', 'debt', 'international'];
+    const labels = { equity: 'Equity', debt: 'Debt', international: 'International' };
+    const acColours = { equity: P.monsoon, debt: P.saffron, international: P.plum };
+    Mausam.chart('alloc-ac', {
+      type: 'doughnut',
+      data: { labels: keys.map((k) => labels[k]), datasets: [{ data: keys.map((k) => alloc[k] || 0), backgroundColor: keys.map((k) => acColours[k]), borderColor: P.surface, borderWidth: 2 }] },
+      options: { cutout: '62%', plugins: { legend: { position: window.innerWidth < 560 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: (c) => `${c.label}: ${Number(c.raw).toFixed(1)}%` } } } },
+    });
+
+    // Invested vs value
+    if (series.length >= 2) {
+      Mausam.chart('ivv', {
+        type: 'line',
+        data: { datasets: [
+          { label: 'Value', data: series.map((p) => ({ x: p.date, y: p.value })), borderColor: P.monsoon, backgroundColor: Mausam.alpha(P.monsoon, 0.16), fill: 'origin', tension: 0.25 },
+          { label: 'Invested', data: series.map((p) => ({ x: p.date, y: p.invested })), borderColor: P.slate, borderDash: [5, 4], backgroundColor: 'transparent', fill: false, stepped: true },
+        ] },
+        options: { interaction: { mode: 'index', intersect: false },
+          scales: { x: Mausam.timeScale(), y: { beginAtZero: true, ticks: { callback: (v) => short(v) } } },
+          plugins: { legend: { position: 'top', align: 'end' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${Mausam.inr(c.raw.y)}` } } } },
+      });
+      const first = series[0], last = series[series.length - 1];
+      const g = last.value - last.invested;
+      setText('ivv-sum', `Since ${Mausam.date(first.date)}, you've put in ${Mausam.inr(last.invested)}. On ${Mausam.date(last.date)} it was worth ${Mausam.inr(last.value)}, ${g >= 0 ? 'a gain' : 'a loss'} of ${Mausam.inr(Math.abs(g))}. The shaded area above the dashed line is your gain.`);
+    }
+
+    // Contribution to gains
+    const byGain = funds.slice().sort((a, b) => b.gain - a.gain);
+    Mausam.chart('contrib', {
+      type: 'bar',
+      data: { labels: byGain.map((f) => f.name), datasets: [{ label: 'Gain', data: byGain.map((f) => f.gain),
+        backgroundColor: byGain.map((f) => f.gain >= 0 ? P.gain : P.loss), borderRadius: 4, maxBarThickness: 26 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => Mausam.inr(c.raw, true) } } },
+        scales: { x: { ticks: { callback: (v) => short(v) } }, y: { grid: { display: false } } } },
+    });
+    if (byGain.length) {
+      const top = byGain[0], bottom = byGain[byGain.length - 1];
+      let s = `${top.name} added the most: ${Mausam.inr(top.gain, true)}.`;
+      if (bottom.gain < 0) s += ` ${bottom.name} is down ${Mausam.inr(Math.abs(bottom.gain))}.`;
+      setText('contrib-sum', s);
+    }
+  }
+  render();
+  document.addEventListener('mausam:theme', render);
+})();
+</script>
+{% endblock %}

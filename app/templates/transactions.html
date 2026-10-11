@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}Transactions{% endblock %}
+
+{% block head %}
+<style>
+  .records-banner { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 14px 18px;
+    border-radius: var(--r-lg); background: var(--monsoon-soft); border: 1px solid color-mix(in srgb, var(--monsoon) 25%, transparent); }
+  .records-banner p { margin: 0; display: flex; gap: 10px; align-items: flex-start; font-weight: 500; }
+  .records-banner p svg { width: 20px; height: 20px; color: var(--monsoon); flex: none; margin-top: 1px; }
+  .field-wide { grid-column: 1 / -1; }
+  .preview { border: 1px dashed var(--line); border-radius: var(--r-sm); padding: 14px; background: var(--surface-2); min-height: 74px; margin-bottom: 14px; }
+  .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .preview-grid .k { font-size: 12px; color: var(--slate); display: block; }
+  .preview-grid .v { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .preview-grid .s { font-size: 12px; color: var(--slate); display: block; }
+  .preview.error { border-color: color-mix(in srgb, var(--loss) 45%, var(--line)); background: var(--loss-soft); }
+  .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; align-items: end; }
+  .filters .field { margin-bottom: 10px; }
+  .type-chip { font-size: 12px; padding: 2px 8px; }
+  .type-chip.sell { background: var(--saffron-soft); color: color-mix(in srgb, var(--saffron) 70%, var(--ink)); border-color: transparent; }
+  .type-chip.sip { background: var(--monsoon-soft); color: var(--monsoon); border-color: transparent; }
+  .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .row-actions .btn { width: 32px; padding: 0; }
+  #h-table td.note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--slate); font-size: 13px; }
+  .cal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .cal-head h3 { margin: 0 6px; min-width: 140px; text-align: center; }
+  .calendar .day .n { font-weight: 600; color: var(--slate); }
+  .calendar .day.today .n { color: var(--monsoon); }
+  .calendar button.sip { border: 0; width: 100%; text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
+  .calendar button.sip[disabled] { cursor: default; opacity: .85; }
+  .sip-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .sip-list li { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+  .whatif-result { margin-top: 14px; }
+  .whatif-result .big { font-family: var(--font-head); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) {
+    .calendar .day { min-height: 46px; padding: 3px; }
+    .calendar .sip, .calendar button.sip { font-size: 0 !important; height: 7px; padding: 0 !important; }
+    #h-table td.note { max-width: 120px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set fund_js = [] %}
+{% for f in funds %}{% set _ = fund_js.append({'id': f.id, 'name': f.short_name or f.scheme_name, 'code': f.scheme_code, 'colour': f.colour,
+                                              'sip_amount': f.sip_amount, 'sip_day': f.sip_day}) %}{% endfor %}
+
+<div class="page-head">
+  <div>
+    <h1>Transactions</h1>
+    <p>Log every {{ term('sip', 'SIP') }}, buy and sell so Mausam can work out what you own and how it's doing.</p>
+  </div>
+  <a class="btn no-print" href="/api/transactions/export.csv" download><i data-lucide="download" aria-hidden="true"></i>Export CSV</a>
+</div>
+
+<div class="records-banner" role="note" style="margin-bottom:20px">
+  <p><i data-lucide="info" aria-hidden="true"></i><span>Mausam records your investments. To actually invest or withdraw, use your investing app.</span></p>
+  {% if platform_url %}<a class="btn btn-primary" href="{{ platform_url }}" target="_blank" rel="noopener">Open your investing app<i data-lucide="external-link" aria-hidden="true"></i></a>{% endif %}
+</div>
+
+{% if not funds %}
+<div class="panel">{{ m.empty('list-plus', 'Add a fund first', 'Transactions belong to a fund. Add your funds on the Manage funds page, then come back to log what you invested.', '/manage', 'Add a fund') }}</div>
+{% else %}
+<div class="stack">
+  <div class="grid">
+    {# ---------- Add transaction ---------- #}
+    <section class="panel span-7" aria-labelledby="add-h" id="add">
+      <div class="panel-head"><h2 id="add-h">Log a transaction</h2></div>
+      <form id="add-form" novalidate autocomplete="off">
+        <div class="form-grid">
+          <div class="field">
+            <label for="t-fund">Fund</label>
+            <select id="t-fund" required>
+              {% for f in funds %}<option value="{{ f.id }}">{{ f.short_name or f.scheme_name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="t-type">Type</label>
+            <select id="t-type">
+              <option value="sip">SIP (monthly investment)</option>
+              <option value="buy">One-time buy</option>
+              <option value="sell">Sell (withdraw)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="t-date">Date</label>
+            <input type="date" id="t-date" max="{{ today.isoformat() }}" value="{{ today.isoformat() }}" required>
+            <p class="hint">The day the money moved. Future dates aren't allowed.</p>
+          </div>
+          <div class="field" id="sellby-field" hidden>
+            <span class="label" style="font-weight:600;font-size:14px;display:block;margin-bottom:6px" id="sellby-label">Sell by</span>
+            <div class="segmented" role="group" aria-labelledby="sellby-label">
+              <button type="button" data-by="amount" aria-pressed="true">Rupees</button>
+              <button type="button" data-by="units" aria-pressed="false">Units</button>
+            </div>
+          </div>
+          <div class="field" id="amount-field">
+            <label for="t-amount">Amount (₹)</label>
+            <input type="number" id="t-amount" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 5000">
+          </div>
+          <div class="field" id="units-field" hidden>
+            <label for="t-units">Units to sell</label>
+            <input type="number" id="t-units" min="0.0001" step="0.0001" inputmode="decimal" placeholder="e.g. 120.5">
+          </div>
+          <div class="field field-wide">
+            <label for="t-note">Note <span class="muted" style="font-weight:400">(optional)</span></label>
+            <input type="text" id="t-note" maxlength="300" placeholder="e.g. Diwali bonus top-up">
+          </div>
+        </div>
+        <div class="preview" id="t-preview" aria-live="polite">
+          <p class="muted small" style="margin:0">Pick a fund, a date and an amount. Mausam will show the {{ term('nav', 'NAV') }} it will use and the units you get, before anything is saved.</p>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" type="submit" id="t-save" disabled><i data-lucide="check" aria-hidden="true"></i>Save transaction</button>
+          <span class="small muted" id="t-save-hint">Save unlocks once the preview above is ready.</span>
+        </div>
+      </form>
+    </section>
+
+    {# ---------- What-if simulator ---------- #}
+    <section class="panel span-5" aria-labelledby="wi-h" id="whatif">
+      <div class="panel-head"><h2 id="wi-h">What if?</h2></div>
+      <p class="small muted">"What if I had invested a bit extra?" Try it here. Nothing is saved unless you ask.</p>
+      <form id="w-form" novalidate>
+        <div class="field">
+          <label for="w-fund">Fund</label>
+          <select id="w-fund">{% for f in funds %}<option value="{{ f.id }}">{{ f.short_name or f.scheme_name }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="w-amount">Amount (₹)</label>
+            <input type="number" id="w-amount" min="1" step="1" inputmode="decimal" value="10000">
+          </div>
+          <div class="field">
+            <label for="w-date">On this date</label>
+            <input type="date" id="w-date" max="{{ today.isoformat() }}">
+          </div>
+        </div>
+        <button class="btn btn-primary" type="submit" id="w-go"><i data-lucide="wand-2" aria-hidden="true"></i>Work it out</button>
+      </form>
+      <div class="whatif-result" id="w-out" aria-live="polite"></div>
+      <div id="w-save-wrap" hidden style="margin-top:12px">
+        <button class="btn" type="button" id="w-save"><i data-lucide="bookmark-plus" aria-hidden="true"></i>Save as a simulated transaction</button>
+        <p class="hint">Simulated transactions show up dashed and in italics in your history. They are never counted in your real totals, reports or {{ term('xirr', 'XIRR') }}.</p>
+      </div>
+    </section>
+  </div>
+
+  {# ---------- History ---------- #}
+  <section class="panel" aria-labelledby="h-h">
+    <div class="panel-head">
+      <h2 id="h-h">History</h2>
+      <span class="small muted" id="h-summary" aria-live="polite"></span>
+    </div>
+    <form class="filters" id="h-filters" aria-label="Filter transactions">
+      <div class="field">
+        <label for="f-fund">Fund</label>
+        <select id="f-fund"><option value="">All funds</option>{% for f in funds %}<option value="{{ f.id }}">{{ f.short_name or f.scheme_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="field">
+        <label for="f-type">Type</label>
+        <select id="f-type"><option value="">All types</option><option value="sip">SIP</option><option value="buy">Buy</option><option value="sell">Sell</option></select>
+      </div>
+      <div class="field"><label for="f-from">From</label><input type="date" id="f-from" max="{{ today.isoformat() }}"></div>
+      <div class="field"><label for="f-to">To</label><input type="date" id="f-to" max="{{ today.isoformat() }}"></div>
+      <div class="field">
+        <label class="check" style="margin:0 0 10px"><input type="checkbox" id="f-sim" checked> Show simulated</label>
+        <button class="btn btn-sm btn-ghost" type="reset" id="f-clear">Clear filters</button>
+      </div>
+    </form>
+    <div class="table-wrap">
+      <table id="h-table">
+        <thead><tr>
+          <th scope="col">Date</th><th scope="col">Fund</th><th scope="col">Type</th>
+          <th scope="col" class="num">Amount</th><th scope="col" class="num">{{ term('nav', 'NAV') }}</th><th scope="col" class="num">Units</th>
+          <th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th>
+        </tr></thead>
+        <tbody id="h-body"><tr><td colspan="8">{{ m.skeleton(3) }}</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  {# ---------- SIP calendar ---------- #}
+  <section class="panel" aria-labelledby="cal-h">
+    <div class="panel-head">
+      <h2 id="cal-h">SIP calendar</h2>
+      <span class="small" id="cal-total"></span>
+    </div>
+    <div class="grid">
+      <div class="span-8">
+        <div class="cal-head">
+          <button class="btn btn-sm" type="button" id="cal-prev" aria-label="Previous month"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <h3 id="cal-title" aria-live="polite"></h3>
+          <button class="btn btn-sm" type="button" id="cal-next" aria-label="Next month"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+          <button class="btn btn-sm btn-ghost" type="button" id="cal-today">This month</button>
+        </div>
+        <div class="calendar" id="cal-grid" aria-hidden="true"></div>
+        <p class="small muted" style="margin-top:8px">Tap a SIP on or before today to log it in the form above.</p>
+      </div>
+      <div class="span-4">
+        <h3 style="font-size:15px">SIPs this month</h3>
+        <ul class="sip-list" id="cal-list"></ul>
+        <h3 style="font-size:15px;margin-top:18px">Coming up next</h3>
+        {% if sips %}
+        <ul class="sip-list">
+          {% for s in sips %}
+          <li><span class="swatch" style="background:{{ s.colour or 'var(--monsoon)' }}"></span>
+            <span><strong>{{ s.name }}</strong>: {{ s.amount|inr }} on {{ s.date|d('short') }}
+              <span class="muted">({{ 'today' if s.days == 0 else ('tomorrow' if s.days == 1 else 'in ' ~ s.days ~ ' days') }})</span></span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="small muted">No SIPs set. Add a SIP amount and day on the <a href="/manage">Manage funds</a> page.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+{# ---------- Edit dialog ---------- #}
+<dialog id="edit-dialog" aria-labelledby="edit-h">
+  <form id="edit-form" novalidate>
+    <h3 id="edit-h">Edit transaction</h3>
+    <p class="muted small" id="e-fund" style="margin-top:-4px"></p>
+    <div class="form-grid">
+      <div class="field">
+        <label for="e-type">Type</label>
+        <select id="e-type"><option value="sip">SIP</option><option value="buy">Buy</option><option value="sell">Sell</option></select>
+      </div>
+      <div class="field">
+        <label for="e-date">Date</label>
+        <input type="date" id="e-date" max="{{ today.isoformat() }}">
+      </div>
+      <div class="field">
+        <label for="e-amount">Amount (₹)</label>
+        <input type="number" id="e-amount" min="1" step="0.01" inputmode="decimal">
+      </div>
+      <div class="field" id="e-units-field" hidden>
+        <label for="e-units">Or units sold</label>
+        <input type="number" id="e-units" min="0" step="0.0001" inputmode="decimal" placeholder="leave blank to use amount">
+      </div>
+    </div>
+    <div class="field">
+      <label for="e-note">Note</label>
+      <input type="text" id="e-note" maxlength="300">
+    </div>
+    <p class="hint" style="margin-top:-6px">The NAV and units are worked out again from the new date and amount.</p>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button class="btn" type="button" id="e-cancel">Cancel</button>
+      <button class="btn btn-primary" type="submit" id="e-save">Save changes</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+{{ m.json_data('txn-data', {'funds': fund_js, 'today': today.isoformat()}) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const D = Mausam.data('txn-data') || {};
+  const FUNDS = D.funds || [];
+  if (!FUNDS.length) return;
+  const TODAY = D.today;
+  const $ = (id) => document.getElementById(id);
+  const esc = Mausam.esc;
+  const fundById = (id) => FUNDS.find((f) => String(f.id) === String(id)) || {};
+  const n = (v, d) => (v === null || v === undefined || isNaN(Number(v))) ? '–'
+    : Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const rupees = (v) => (v === null || v === undefined) ? '–' : '₹' + n(v, 2);
+  const TYPE_LABEL = { sip: 'SIP', buy: 'Buy', sell: 'Sell' };
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+  // =============== Add transaction with live preview ===============
+  const fFund = $('t-fund'), fType = $('t-type'), fDate = $('t-date'), fAmount = $('t-amount'), fUnits = $('t-units'), fNote = $('t-note');
+  const preview = $('t-preview'), saveBtn = $('t-save'), saveHint = $('t-save-hint');
+  let sellBy = 'amount', seq = 0, readyKey = null;
+
+  function syncTypeUI() {
+    const sell = fType.value === 'sell';
+    $('sellby-field').hidden = !sell;
+    const byUnits = sell && sellBy === 'units';
+    $('units-field').hidden = !byUnits;
+    $('amount-field').hidden = byUnits;
+    if (fType.value === 'sip' && !fAmount.value) {
+      const f = fundById(fFund.value);
+      if (f.sip_amount) fAmount.value = Number(f.sip_amount);
+    }
+  }
+  document.querySelectorAll('#sellby-field [data-by]').forEach((b) => b.addEventListener('click', () => {
+    sellBy = b.dataset.by;
+    document.querySelectorAll('#sellby-field [data-by]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    syncTypeUI(); schedulePreview();
+  }));
+
+  function payload() {
+    const p = { fund_id: Number(fFund.value), txn_type: fType.value, txn_date: fDate.value, note: fNote.value.trim() };
+    if (fType.value === 'sell' && sellBy === 'units') p.units = fUnits.value === '' ? null : Number(fUnits.value);
+    else p.amount = fAmount.value === '' ? null : Number(fAmount.value);
+    return p;
+  }
+  function filled(p) {
+    if (!p.fund_id || !p.txn_date) return false;
+    return 'units' in p ? p.units > 0 : p.amount > 0;
+  }
+  function setSave(ok, hint) {
+    saveBtn.disabled = !ok;
+    saveHint.textContent = hint || '';
+  }
+  function renderPreview(t) {
+    preview.classList.remove('error');
+    const isSell = t.txn_type === 'sell';
+    preview.innerHTML = `
+      <div class="preview-grid">
+        <div><span class="k">NAV used</span><span class="v">${rupees(t.nav)}</span><span class="s">from ${Mausam.date(t.nav_date)}</span></div>
+        <div><span class="k">${isSell ? 'You receive about' : 'You invest'}</span><span class="v">${rupees(t.amount)}</span></div>
+        <div><span class="k">Units ${isSell ? 'sold' : 'bought'}</span><span class="v">${isSell ? '−' : '+'}${n(t.units, 4)}</span></div>
+        <div><span class="k">Units held after</span><span class="v">${n(t.units_held_after, 4)}</span><span class="s">in ${esc(t.fund_name)}</span></div>
+      </div>
+      ${t.nav_note ? `<p class="small" style="margin:10px 0 0"><i data-lucide="calendar-clock" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px"></i> ${esc(t.nav_note)}</p>` : ''}`;
+    Mausam.icons();
+  }
+  function renderPreviewError(msg) {
+    preview.classList.add('error');
+    preview.innerHTML = `<p style="margin:0"><strong>Can't save this yet.</strong> ${esc(msg)}</p>`;
+  }
+  async function runPreview() {
+    const p = payload();
+    readyKey = null;
+    if (!filled(p)) {
+      preview.classList.remove('error');
+      preview.innerHTML = '<p class="muted small" style="margin:0">Fill in the fund, date and ' + ('units' in p ? 'units' : 'amount') + ' to see the preview.</p>';
+      setSave(false, 'Save unlocks once the preview above is ready.');
+      return;
+    }
+    if (p.txn_date > TODAY) { renderPreviewError("The date can't be in the future. Log transactions after they happen."); setSave(false); return; }
+    const my = ++seq;
+    preview.classList.remove('error');
+    preview.innerHTML = '<p class="muted small" style="margin:0">Looking up the NAV…</p>';
+    setSave(false, 'Checking…');
+    try {
+      const t = await Mausam.api('POST', '/api/transactions', Object.assign({}, p, { dry_run: true }));
+      if (my !== seq) return;
+      renderPreview(t);
+      readyKey = JSON.stringify(p);
+      setSave(true, 'Looks right? Save it.');
+    } catch (e) {
+      if (my !== seq) return;
+      renderPreviewError(e.message);
+      setSave(false, '');
+    }
+  }
+  const schedulePreview = debounce(runPreview, 400);
+  [fFund, fType, fDate, fAmount, fUnits, fNote].forEach((el) => {
+    el.addEventListener('input', () => { setSave(false, 'Updating preview…'); schedulePreview(); });
+    el.addEventListener('change', () => { if (el === fType || el === fFund) syncTypeUI(); schedulePreview(); });
+  });
+  $('add-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const p = payload();
+    if (readyKey !== JSON.stringify(p)) { runPreview(); return; }
+    Mausam.busy(saveBtn, async () => {
+      try {
+        const row = await Mausam.api('POST', '/api/transactions', p);
+        Mausam.toast(`Saved: ${TYPE_LABEL[row.txn_type] || 'Transaction'} of ${rupees(row.amount)} in ${fundById(row.fund_id).name || 'your fund'}, ${n(row.units, 4)} units.`);
+        fAmount.value = ''; fUnits.value = ''; fNote.value = '';
+        readyKey = null;
+        preview.classList.remove('error');
+        preview.innerHTML = '<p class="muted small" style="margin:0">Saved. Log another one any time.</p>';
+        loadHistory();
+      } catch (err) { Mausam.toast(err.message, 'error'); }
+    }).then(() => { if (!readyKey) setSave(false, ''); });
+  });
+  syncTypeUI();
+
+  // =============== History ===============
+  const hBody = $('h-body'), hSummary = $('h-summary');
+  let rows = [];
+  function query() {
+    const q = new URLSearchParams();
+    if ($('f-fund').value) q.set('fund_id', $('f-fund').value);
+    if ($('f-type').value) q.set('type', $('f-type').value);
+    if ($('f-from').value) q.set('from', $('f-from').value);
+    if ($('f-to').value) q.set('to', $('f-to').value);
+    if ($('f-sim').checked) q.set('simulated', 'include');
+    return q.toString();
+  }
+  async function loadHistory() {
+    try {
+      rows = await Mausam.api('GET', '/api/transactions?' + query()) || [];
+      renderHistory();
+    } catch (e) {
+      hBody.innerHTML = `<tr><td colspan="8" class="muted">${esc(e.message)}</td></tr>`;
+    }
+  }
+  function renderHistory() {
+    if (!rows.length) {
+      const filtered = query().replace('simulated=include', '').replace(/&/g, '') !== '';
+      hBody.innerHTML = `<tr><td colspan="8"><div class="empty" style="padding:24px"><h3>${filtered ? 'Nothing matches these filters' : 'No transactions yet'}</h3>
+        <p>${filtered ? 'Try clearing the filters.' : 'Log your first SIP or buy with the form above.'}</p></div></td></tr>`;
+      hSummary.textContent = '';
+      return;
+    }
+    hBody.innerHTML = rows.map((t) => {
+      const sim = !!t.is_simulated;
+      const type = TYPE_LABEL[t.txn_type] || t.txn_type;
+      const sign = t.txn_type === 'sell' ? '−' : '';
+      return `<tr class="${sim ? 'simulated' : ''}" data-id="${t.id}">
+        <td class="num" data-value="${esc(t.txn_date)}">${Mausam.date(t.txn_date)}</td>
+        <td><span class="swatch" style="background:${esc(t.colour || 'var(--monsoon)')};margin-right:6px"></span>${esc(t.fund_name)}
+          ${sim ? '<span class="chip" style="font-size:11px;padding:1px 7px;margin-left:4px">Simulated</span>' : ''}
+          ${t.fund_active === false ? '<span class="chip" style="font-size:11px;padding:1px 7px;margin-left:4px">Removed fund</span>' : ''}</td>
+        <td><span class="chip type-chip ${esc(t.txn_type)}">${esc(type)}</span></td>
+        <td class="num">${sign}${rupees(t.amount)}</td>
+        <td class="num">${rupees(t.nav)}</td>
+        <td class="num">${sign}${n(t.units, 4)}</td>
+        <td class="note" title="${esc(t.note || '')}">${esc(t.note || '')}</td>
+        <td><div class="row-actions">
+          <button class="btn btn-sm btn-ghost" type="button" data-act="edit" aria-label="Edit ${esc(type)} on ${Mausam.date(t.txn_date)}"><i data-lucide="pencil" aria-hidden="true"></i></button>
+          <button class="btn btn-sm btn-ghost" type="button" data-act="delete" aria-label="Delete ${esc(type)} on ${Mausam.date(t.txn_date)}"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+        </div></td></tr>`;
+    }).join('');
+    const real = rows.filter((t) => !t.is_simulated);
+    const inv = real.filter((t) => t.txn_type !== 'sell').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const out = real.filter((t) => t.txn_type === 'sell').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const simN = rows.length - real.length;
+    hSummary.textContent = `${rows.length} shown · invested ${Mausam.inr(inv)}` + (out ? ` · withdrawn ${Mausam.inr(out)}` : '') +
+      (simN ? ` · ${simN} simulated (not counted)` : '');
+    Mausam.icons();
+  }
+  hBody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const id = Number(btn.closest('tr').dataset.id);
+    const t = rows.find((r) => r.id === id);
+    if (!t) return;
+    if (btn.dataset.act === 'edit') return openEdit(t);
+    const ok = await Mausam.confirm('Delete this transaction?',
+      `This removes the ${TYPE_LABEL[t.txn_type] || t.txn_type} of ${rupees(t.amount)} in ${t.fund_name} on ${Mausam.date(t.txn_date)} from your records. It can't be undone. Your other transactions are not affected.`,
+      'Delete');
+    if (!ok) return;
+    Mausam.busy(btn, async () => {
+      try { await Mausam.api('DELETE', `/api/transactions/${id}`); Mausam.toast('Transaction deleted.'); loadHistory(); }
+      catch (err) { Mausam.toast(err.message, 'error'); }
+    });
+  });
+  const reloadDebounced = debounce(loadHistory, 250);
+  ['f-fund', 'f-type', 'f-from', 'f-to', 'f-sim'].forEach((id) => $(id).addEventListener('change', reloadDebounced));
+  $('h-filters').addEventListener('reset', () => setTimeout(loadHistory, 0));
+  $('h-filters').addEventListener('submit', (e) => e.preventDefault());
+  loadHistory();
+
+  // =============== Edit dialog ===============
+  const dlg = $('edit-dialog');
+  let editing = null;
+  function syncEditUnits() { $('e-units-field').hidden = $('e-type').value !== 'sell'; }
+  function openEdit(t) {
+    editing = t;
+    $('e-fund').textContent = `${t.fund_name}${t.is_simulated ? ' · simulated' : ''}`;
+    $('e-type').value = t.txn_type; $('e-date').value = String(t.txn_date).slice(0, 10);
+    $('e-amount').value = Number(t.amount); $('e-units').value = ''; $('e-note').value = t.note || '';
+    syncEditUnits();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  $('e-type').addEventListener('change', syncEditUnits);
+  $('e-cancel').addEventListener('click', () => dlg.close());
+  $('edit-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    const body = { txn_type: $('e-type').value, txn_date: $('e-date').value, amount: Number($('e-amount').value), note: $('e-note').value.trim() };
+    if (body.txn_type === 'sell' && $('e-units').value !== '') body.units = Number($('e-units').value);
+    if (body.txn_date > TODAY) { Mausam.toast("The date can't be in the future.", 'error'); return; }
+    Mausam.busy($('e-save'), async () => {
+      try {
+        await Mausam.api('PATCH', `/api/transactions/${editing.id}`, body);
+        dlg.close(); Mausam.toast('Transaction updated.'); loadHistory();
+      } catch (err) { Mausam.toast(err.message, 'error'); }
+    });
+  });
+
+  // =============== What-if simulator ===============
+  const wDate = $('w-date');
+  (function () {
+    // Default: about 13 months ago, so the yearly return can be shown.
+    const [y, m, d] = TODAY.split('-').map(Number);
+    const dt = new Date(y - 1, m - 2, Math.min(d, 28));
+    wDate.value = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  })();
+  let lastSim = null;
+  function simBody() { return { fund_id: Number($('w-fund').value), amount: Number($('w-amount').value), txn_date: wDate.value }; }
+  $('w-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const b = simBody();
+    if (!(b.amount > 0) || !b.txn_date) { Mausam.toast('Enter an amount and a date.', 'error'); return; }
+    Mausam.busy($('w-go'), async () => {
+      try {
+        const r = await Mausam.api('POST', '/api/transactions/simulate', b);
+        lastSim = b;
+        const up = Number(r.gain) >= 0;
+        $('w-out').innerHTML = `
+          <p style="margin:0 0 8px">If you had put <strong>${rupees(r.amount)}</strong> into ${esc(r.fund_name)} on ${Mausam.date(r.txn_date)}
+            (NAV ${rupees(r.nav)} on ${Mausam.date(r.nav_date)}), it would be worth about</p>
+          <div class="big">${Mausam.inr(r.value_today)}</div>
+          <p class="small muted" style="margin:2px 0 10px">today, at the NAV of ${rupees(r.latest_nav)} on ${Mausam.date(r.latest_nav_date)}</p>
+          <div class="stats-row" style="gap:12px">
+            <div class="stat"><span class="stat-label">Gain or loss</span>
+              <span class="num ${up ? 'gain' : 'loss'}" style="font-weight:600">${up ? '▲' : '▼'} ${Mausam.inr(r.gain, true)} (${Mausam.pct(r.gain_pct, 1, false)})</span></div>
+            <div class="stat"><span class="stat-label">Yearly return</span>
+              ${r.yearly_return !== null && r.yearly_return !== undefined ? Mausam.pctHTML(r.yearly_return, 1) : '<span class="muted small">Shown for a year or more</span>'}</div>
+          </div>
+          ${r.nav_note ? `<p class="small muted" style="margin:10px 0 0">${esc(r.nav_note)}</p>` : ''}
+          <p class="small muted" style="margin:10px 0 0">Past results don't tell you what will happen next.</p>`;
+        $('w-save-wrap').hidden = false;
+        Mausam.icons();
+      } catch (err) { $('w-save-wrap').hidden = true; Mausam.toast(err.message, 'error'); }
+    });
+  });
+  $('w-save').addEventListener('click', () => {
+    if (!lastSim) return;
+    Mausam.busy($('w-save'), async () => {
+      try {
+        await Mausam.api('POST', '/api/transactions/simulate', Object.assign({}, lastSim, { save: true }));
+        Mausam.toast('Saved as a simulated transaction. It is shown dashed and is not counted in your real totals.');
+        $('w-save-wrap').hidden = true;
+        $('f-sim').checked = true;
+        loadHistory();
+      } catch (err) { Mausam.toast(err.message, 'error'); }
+    });
+  });
+
+  // =============== SIP calendar ===============
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const [ty, tm] = TODAY.split('-').map(Number);
+  let cy = ty, cm = tm - 1;
+  const sipFunds = FUNDS.filter((f) => f.sip_amount && f.sip_day);
+  const iso = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  function renderCalendar() {
+    $('cal-title').textContent = `${MONTHS[cm]} ${cy}`;
+    const first = new Date(cy, cm, 1);
+    const offset = (first.getDay() + 6) % 7;
+    const days = new Date(cy, cm + 1, 0).getDate();
+    const byDay = {};
+    sipFunds.forEach((f) => { const d = Math.min(Number(f.sip_day), 28); (byDay[d] = byDay[d] || []).push(f); });
+    let html = DOW.map((d) => `<div class="dow">${d}</div>`).join('');
+    for (let i = 0; i < offset; i++) html += '<div class="day blank"></div>';
+    for (let d = 1; d <= days; d++) {
+      const dIso = iso(cy, cm, d);
+      const list = byDay[d] || [];
+      html += `<div class="day${dIso === TODAY ? ' today' : ''}"><span class="n">${d}</span>` +
+        list.map((f) => {
+          const past = dIso <= TODAY;
+          return `<button type="button" class="sip" style="background:${esc(f.colour || '#0E7C7B')}" data-fund="${f.id}" data-date="${dIso}"
+            ${past ? '' : 'disabled'} title="${esc(f.name)}: ${Mausam.inr(f.sip_amount)}${past ? ' (tap to log it)' : ''}" tabindex="-1">${esc(f.name)} ${Mausam.inr(f.sip_amount)}</button>`;
+        }).join('') + '</div>';
+    }
+    $('cal-grid').innerHTML = html;
+    const total = sipFunds.reduce((s, f) => s + Number(f.sip_amount), 0);
+    $('cal-total').innerHTML = sipFunds.length
+      ? `Monthly SIP total: <strong class="num">${Mausam.inr(total)}</strong> across ${sipFunds.length} SIP${sipFunds.length === 1 ? '' : 's'}`
+      : '<span class="muted">No SIPs set yet</span>';
+    const items = sipFunds.slice().sort((a, b) => Math.min(a.sip_day, 28) - Math.min(b.sip_day, 28)).map((f) => {
+      const dIso = iso(cy, cm, Math.min(Number(f.sip_day), 28));
+      const past = dIso <= TODAY;
+      return `<li><span class="swatch" style="background:${esc(f.colour || '#0E7C7B')}"></span>
+        <span style="flex:1"><strong>${Mausam.date(dIso, true)}</strong> · ${esc(f.name)} · ${Mausam.inr(f.sip_amount)}</span>
+        ${past ? `<button class="btn btn-sm" type="button" data-fund="${f.id}" data-date="${dIso}">Log it</button>` : '<span class="small muted">upcoming</span>'}</li>`;
+    });
+    $('cal-list').innerHTML = items.join('') || '<li class="muted small">No SIPs set. Add one on the Manage funds page.</li>';
+  }
+  function prefill(fundId, dIso) {
+    const f = fundById(fundId);
+    fFund.value = String(fundId); fType.value = 'sip'; fDate.value = dIso; fAmount.value = f.sip_amount ? Number(f.sip_amount) : '';
+    sellBy = 'amount'; syncTypeUI();
+    $('add').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    fAmount.focus({ preventScroll: true });
+    runPreview();
+  }
+  [$('cal-grid'), $('cal-list')].forEach((host) => host.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-fund]');
+    if (b && !b.disabled) prefill(b.dataset.fund, b.dataset.date);
+  }));
+  $('cal-prev').addEventListener('click', () => { cm -= 1; if (cm < 0) { cm = 11; cy -= 1; } renderCalendar(); });
+  $('cal-next').addEventListener('click', () => { cm += 1; if (cm > 11) { cm = 0; cy += 1; } renderCalendar(); });
+  $('cal-today').addEventListener('click', () => { cy = ty; cm = tm - 1; renderCalendar(); });
+  renderCalendar();
+})();
+</script>
+{% endblock %}

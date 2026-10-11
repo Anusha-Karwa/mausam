@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block title %}{% if fund %}{{ fund.short_name or fund.scheme_name }}{% else %}{{ (meta or {}).get('scheme_name') or ('Scheme ' ~ code) }}{% endif %}{% endblock %}
+
+{% block head %}
+<style>
+  .fund-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 28px; align-items: start; }
+  @media (max-width: 760px) { .fund-head { grid-template-columns: 1fr; } }
+  .fund-head h1 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .fund-head h1 .swatch { width: 14px; height: 14px; border-radius: 4px; }
+  .fund-head .full { color: var(--slate); margin-bottom: 12px; }
+  .meta-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .meta-chips .chip { font-weight: 500; }
+  .head-nav { text-align: right; }
+  @media (max-width: 760px) { .head-nav { text-align: left; } }
+  .head-nav .stat-value { font-size: 28px; }
+  .info-btn { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--monsoon); cursor: help; padding: 0; }
+  .info-btn svg { width: 14px; height: 14px; }
+  .chart-controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .overlays { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .overlays .check { font-size: 14px; margin: 0; }
+  .overlays .check[aria-disabled="true"] { opacity: .5; }
+  .chart-state { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; background: var(--surface); border-radius: var(--r-sm); }
+  .chart-state .skeleton { width: 100%; height: 100%; }
+  .plain-list { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 16px; line-height: 1.55; }
+  .vol-bars { display: grid; gap: 12px; margin: 14px 0; }
+  .vol-bars .vb-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; gap: 8px; }
+  .vol-bars .vb-track { height: 10px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .vol-bars .vb-fill { height: 100%; border-radius: 5px; }
+  .fc-range { font-family: var(--font-head); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .notes-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+  .unavailable { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-sm); border: 1px dashed var(--line); color: var(--slate); font-size: 14px; }
+  .unavailable svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+  .type-chip { min-width: 46px; justify-content: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro diffcell(v) -%}
+{% if v is none %}<span class="num muted" title="Not enough data">–</span>
+{%- else %}<span class="num {{ 'gain' if v >= 0 else 'loss' }}">{{ '▲ +' if v >= 0 else '▼ −' }}{{ '%.2f'|format(v|abs) }} pts</span>{% endif %}
+{%- endmacro %}
+
+{% set src = fund or meta or {} %}
+{% set full_name = (fund.scheme_name if fund else src.get('scheme_name')) or ('Scheme ' ~ code) %}
+{% set fund_name = (fund.short_name or fund.scheme_name) if fund else full_name %}
+{% set has_bench = bkey and bkey != 'CATEGORY_ONLY' %}
+{% set ref_label = 'benchmark' if has_bench else 'category average' %}
+{% set asset_class = fund.asset_class if fund else info.asset_class %}
+{% set colour = (fund.colour if fund else none) or 'var(--monsoon)' %}
+
+<div class="stack">
+
+  {# ---------- Header ---------- #}
+  <section class="panel" aria-labelledby="fund-h">
+    <div class="fund-head">
+      <div>
+        <h1 id="fund-h"><span class="swatch" style="background:{{ colour }}" aria-hidden="true"></span>{{ fund_name }}</h1>
+        {% if fund_name != full_name %}<p class="full">{{ full_name }}</p>{% else %}<div style="height:8px"></div>{% endif %}
+        <div class="meta-chips">
+          {% if src.get('fund_house') %}<span class="chip"><i data-lucide="building-2" aria-hidden="true"></i>{{ src.get('fund_house') }}</span>{% endif %}
+          {% if src.get('scheme_category') %}<span class="chip">{{ src.get('scheme_category') }}</span>{% endif %}
+          <span class="chip teal">{{ asset_class|asset }}</span>
+          <span class="chip">
+            {% if has_bench %}{{ term('benchmark', 'Benchmark') }}: {{ bkey|bench }}{% else %}Compared with the {{ term('category average', 'category average') }}{% endif %}
+          </span>
+          {% set why = 'You picked this benchmark yourself on Manage funds.' if (fund and fund.benchmark_is_override) else info.why %}
+          <button type="button" class="info-btn" data-tip="How we chose this: {{ why }}" aria-label="How we chose this benchmark: {{ why }}"><i data-lucide="info" aria-hidden="true"></i></button>
+          {% if fund %}<a class="small" href="/manage">Change benchmark</a>{% endif %}
+          {% if stale %}<span class="chip warn" data-tip="The latest price is more than 4 days old. mfapi.in may not have updated yet."><i data-lucide="clock" aria-hidden="true"></i>Stale data</span>{% endif %}
+        </div>
+      </div>
+      <div class="head-nav">
+        <div class="stat">
+          <span class="stat-label">Latest {{ term('nav', 'NAV') }}</span>
+          <span class="stat-value">{% if latest.value is not none %}₹{{ latest.value|num(2) }}{% else %}–{% endif %}</span>
+          <span class="stat-sub muted">on {{ latest.as_of|d }} · 1 week {{ latest.ret_1w|pct }}</span>
+        </div>
+      </div>
+    </div>
+    {% if not fund %}
+    <div class="notice" style="margin-top:18px" role="note">
+      <i data-lucide="info" aria-hidden="true"></i>
+      <div class="row" style="justify-content:space-between;flex:1">
+        <span>This fund isn't in your list. You can still look at its prices and returns.</span>
+        <a class="btn btn-primary btn-sm" href="/manage?code={{ code }}"><i data-lucide="plus" aria-hidden="true"></i>Add to my funds</a>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ---------- NAV chart ---------- #}
+  <section class="panel" aria-labelledby="nav-h">
+    <div class="panel-head"><h2 id="nav-h">{{ term('nav', 'NAV') }} over time</h2></div>
+    <div class="chart-controls">
+      <div class="segmented" role="group" aria-label="Time range" id="nav-range">
+        {% for r, label in [('1M','1M'), ('3M','3M'), ('6M','6M'), ('1Y','1Y'), ('3Y','3Y'), ('ALL','All')] %}
+        <button type="button" data-range="{{ r }}" aria-pressed="{{ 'true' if r == '1Y' else 'false' }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+      <div class="overlays" role="group" aria-label="Lines to show">
+        <label class="check" id="ov-bench-wrap"><input type="checkbox" id="ov-bench" checked> {{ bkey|bench if has_bench else 'Benchmark' }}</label>
+        <label class="check" id="ov-cat-wrap"><input type="checkbox" id="ov-cat" checked> {{ term('category average', 'Category average') }}</label>
+        <label class="check" id="ov-fc-wrap"><input type="checkbox" id="ov-fc"> {{ term('forecast range', 'Forecast range') }} (30 days)</label>
+      </div>
+    </div>
+    <div class="chart-box lg">
+      <canvas id="nav-chart" role="img" aria-label="Line chart of this fund's NAV{% if has_bench %} with its benchmark rebased to the same starting point{% endif %}"></canvas>
+      <div class="chart-state" id="nav-state">{{ m.skeleton(1, 300) }}</div>
+    </div>
+    <p class="chart-summary" id="nav-sum" aria-live="polite"></p>
+    <p class="small muted" style="margin:4px 0 0">Comparison lines are rebased: they start at the same point as the fund so you can see who went further.{% if not fund %} Benchmark and category lines appear once the fund is in your list.{% endif %}</p>
+  </section>
+
+  {# ---------- Returns table ---------- #}
+  {% set ns = namespace(r1y=none) %}
+  {% for row in returns_rows %}{% if row.key == 'ret_1y' %}{% set ns.r1y = row %}{% endif %}{% endfor %}
+  <section class="panel" aria-labelledby="ret-h">
+    <div class="panel-head">
+      <h2 id="ret-h">Returns</h2>
+      <span class="small muted">Differences are in {{ term('points', 'points') }}: fund return minus the other return</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Fund returns compared with its benchmark and category average</caption>
+        <thead>
+          <tr>
+            <th scope="col">Period</th>
+            <th scope="col" class="num">This fund</th>
+            {% if has_bench %}
+            <th scope="col" class="num">{{ bkey|bench }}</th>
+            <th scope="col" class="num">vs {{ term('benchmark', 'benchmark') }}</th>
+            {% endif %}
+            <th scope="col" class="num">{{ term('category average', 'Category average') }}{% if peer_count %} <span class="muted" style="font-weight:400">({{ peer_count }} funds)</span>{% endif %}</th>
+            <th scope="col" class="num">vs category</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in returns_rows %}
+          <tr>
+            <th scope="row" style="font-weight:500;color:var(--ink);border-bottom:1px solid var(--line)">
+              {% if row.key == 'ret_ytd' %}{{ term('ytd', 'Year to date') }}
+              {% elif row.key == 'ret_3y_cagr' %}3 years <span class="muted" style="font-weight:400">({{ term('cagr', 'yearly') }})</span>
+              {% else %}{{ row.label }}{% endif %}
+            </th>
+            <td class="num">{{ row.fund|pct }}</td>
+            {% if has_bench %}
+            <td class="num">{{ row.bench|pct }}</td>
+            <td class="num">{{ diffcell(row.vs_bench) }}</td>
+            {% endif %}
+            <td class="num">{{ row.cat|pct }}</td>
+            <td class="num">{{ diffcell(row.vs_cat) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="chart-summary">
+      {% set r1 = ns.r1y %}
+      {% if r1 and r1.fund is not none %}
+        Over 1 year this fund returned {{ '%+.2f'|format(r1.fund) }}%.
+        {% set gap1 = r1.vs_bench if has_bench else r1.vs_cat %}
+        {% if gap1 is not none %}That's {{ '%.2f'|format(gap1|abs) }} points {{ 'ahead of' if gap1 >= 0 else 'behind' }} its {{ ref_label }}.{% endif %}
+      {% else %}
+        This fund doesn't have a full year of prices yet, so longer returns show as a dash.
+      {% endif %}
+      Returns over a year are total growth; the 3-year figure is a yearly average.
+    </p>
+  </section>
+
+  {% if fund %}
+  {# ---------- This week in plain words + gap history ---------- #}
+  <div class="grid">
+    <section class="panel span-5" aria-labelledby="week-h">
+      <div class="panel-head">
+        <h2 id="week-h">This week in plain words</h2>
+        {% if report %}<a class="small" href="/reports/{{ report.week_ending.isoformat() }}">Week ending {{ report.week_ending|d('short') }}</a>{% endif %}
+      </div>
+      {% if summary_sentences %}
+        <ol class="plain-list">{% for s in summary_sentences %}<li>{{ s }}</li>{% endfor %}</ol>
+      {% else %}
+        <p class="muted" style="margin:0">Your Saturday report will sum this fund up in three short sentences. It isn't in a report yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel span-7" aria-labelledby="gap-h">
+      <div class="panel-head">
+        <h2 id="gap-h">Week by week vs its {{ term('benchmark' if has_bench else 'category average', ref_label) }}</h2>
+        {% if gaps %}
+          {% if streak >= 2 %}<span class="chip loss"><i data-lucide="trending-down" aria-hidden="true"></i>Behind for {{ streak }} weeks in a row</span>
+          {% elif streak == 1 %}<span class="chip warn"><i data-lucide="trending-down" aria-hidden="true"></i>Behind last week</span>
+          {% else %}<span class="chip gain"><i data-lucide="check" aria-hidden="true"></i>Not lagging right now</span>{% endif %}
+        {% endif %}
+      </div>
+      {% if gaps %}
+        {% set gn = namespace(ahead=0, counted=0) %}
+        {% for g in gaps %}{% if g.gap is not none %}{% set gn.counted = gn.counted + 1 %}{% if g.gap >= 0 %}{% set gn.ahead = gn.ahead + 1 %}{% endif %}{% endif %}{% endfor %}
+        <div class="chart-box sm"><canvas id="gap-chart" role="img" aria-label="Bar chart of the weekly gap between this fund and its {{ ref_label }} for the last {{ gaps|length }} weeks"></canvas></div>
+        <p class="chart-summary">It kept up with or beat its {{ ref_label }} in {{ gn.ahead }} of the last {{ gn.counted }} weeks. Bars above zero (▲) are weeks it was ahead; bars below zero (▼) are weeks it was behind.</p>
+      {% else %}
+        <p class="muted" style="margin:0">Mausam takes a snapshot every Saturday. The weekly history fills in from there.</p>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------- Calendar years + volatility ---------- #}
+  <div class="grid">
+    <section class="panel span-5" aria-labelledby="cy-h">
+      <div class="panel-head"><h2 id="cy-h">Year by year</h2></div>
+      {% if calendar_years %}
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Return for each calendar year</caption>
+          <thead><tr><th scope="col">Year</th><th scope="col" class="num">Return</th><th scope="col"></th></tr></thead>
+          <tbody>
+            {% for y in calendar_years|reverse %}
+            <tr>
+              <td class="num">{{ y.year }}</td>
+              <td class="num">{{ y.ret|pct }}</td>
+              <td>{% if y.partial %}<span class="chip" data-tip="We only have prices for part of this year, so this isn't a full-year return.">Part year</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="chart-summary">Each row is 1 January to 31 December. Good and bad years both happen; look at the pattern, not one year.</p>
+      {% else %}
+        <p class="muted">Not enough price history for yearly returns yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel span-7" aria-labelledby="vol-h">
+      <div class="panel-head"><h2 id="vol-h">How bumpy is the ride? ({{ term('volatility', 'volatility') }})</h2></div>
+      {% if vol_fund is not none %}
+        {% set vmax = [vol_fund, vol_bench or 0]|max %}
+        <div class="vol-bars">
+          <div>
+            <div class="vb-label"><span>This fund</span><span class="num">{{ vol_fund|num(1) }}% a year</span></div>
+            <div class="vb-track"><div class="vb-fill" style="width:{{ (vol_fund / vmax * 100) if vmax else 0 }}%;background:{{ colour }}"></div></div>
+          </div>
+          {% if vol_bench is not none %}
+          <div>
+            <div class="vb-label"><span>{{ bkey|bench }}</span><span class="num">{{ vol_bench|num(1) }}% a year</span></div>
+            <div class="vb-track"><div class="vb-fill" style="width:{{ (vol_bench / vmax * 100) if vmax else 0 }}%;background:var(--slate)"></div></div>
+          </div>
+          {% endif %}
+        </div>
+        <p style="margin-bottom:6px">In a typical year, this fund's value swings about <strong>±{{ vol_fund|num(0) }}%</strong> around its trend.
+        {% if vol_bench is not none %}
+          {% if vol_fund > vol_bench * 1.1 %}That's bumpier than its benchmark (±{{ vol_bench|num(0) }}%).
+          {% elif vol_fund < vol_bench * 0.9 %}That's calmer than its benchmark (±{{ vol_bench|num(0) }}%).
+          {% else %}That's about as bumpy as its benchmark (±{{ vol_bench|num(0) }}%).{% endif %}
+        {% endif %}</p>
+        <p class="small muted" style="margin:0">Higher numbers mean bigger ups and downs, not worse returns. Based on the last 12 months of daily prices.</p>
+      {% else %}
+        <p class="muted" style="margin:0">We need a few more weeks of daily prices to measure this.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ---------- Drawdown ---------- #}
+  <section class="panel" aria-labelledby="dd-h">
+    <div class="panel-head">
+      <h2 id="dd-h">How far it fell from its high</h2>
+      <span class="small muted">{{ term('drawdown', 'Drawdown') }}, last 3 years</span>
+    </div>
+    {% if drawdown and drawdown|length > 2 %}
+      <div class="chart-box sm"><canvas id="dd-chart" role="img" aria-label="Area chart of how far below its previous high this fund was, over the last 3 years"></canvas></div>
+      <p class="chart-summary">
+        Its deepest fall was {{ '%.1f'|format((max_drawdown or 0)|abs) }}% below its previous high.
+        {% set now_dd = drawdown[-1][1] %}
+        {% if now_dd > -0.5 %}Right now it's at or near its high.{% else %}Right now it's {{ '%.1f'|format(now_dd|abs) }}% below its high.{% endif %}
+        Zero means a new high.
+      </p>
+    {% else %}
+      <p class="muted" style="margin:0">Not enough price history to draw this yet.</p>
+    {% endif %}
+  </section>
+
+  {# ---------- Holdings + forecast ---------- #}
+  {% if fund %}
+  <div class="grid">
+    <section class="panel span-8" aria-labelledby="mine-h">
+      <div class="panel-head">
+        <h2 id="mine-h">Your money in this fund</h2>
+        <a class="small" href="/transactions">Record a transaction</a>
+      </div>
+      {% if holding and holding.units %}
+      <div class="stats-row" style="margin-bottom:18px">
+        <div class="stat"><span class="stat-label">Units</span><span class="stat-value" style="font-size:21px">{{ holding.units|num(3) }}</span></div>
+        <div class="stat"><span class="stat-label">Invested</span><span class="stat-value" style="font-size:21px">{{ holding.invested|inr }}</span></div>
+        <div class="stat"><span class="stat-label">Value</span><span class="stat-value" style="font-size:21px">{{ holding.value|inr }}</span></div>
+        <div class="stat"><span class="stat-label">Gain</span><span class="stat-value" style="font-size:21px">{{ holding.gain|money(signed=true) }}</span><span class="stat-sub">{{ holding.gain_pct|pct }}</span></div>
+        <div class="stat"><span class="stat-label">{{ term('xirr', 'XIRR') }}</span><span class="stat-value" style="font-size:21px">{{ holding.xirr|pct(arrow=false) }}</span></div>
+      </div>
+      {% else %}
+        <p class="muted">You don't hold any units of this fund right now.</p>
+      {% endif %}
+      {% if txns %}
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Your transactions in this fund, newest first</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col" class="num">Amount</th><th scope="col" class="num">{{ term('nav', 'NAV') }}</th><th scope="col" class="num">Units</th><th scope="col">Note</th></tr></thead>
+          <tbody>
+            {% for t in txns %}
+            <tr{% if t.is_simulated %} class="simulated"{% endif %}>
+              <td class="num">{{ t.txn_date|d }}</td>
+              <td>
+                <span class="chip type-chip {{ 'loss' if t.txn_type == 'sell' else ('teal' if t.txn_type == 'sip' else '') }}">{{ {'sip': 'SIP', 'buy': 'Buy', 'sell': 'Sell'}.get(t.txn_type, t.txn_type) }}</span>
+                {% if t.is_simulated %}<span class="chip plum" data-tip="A what-if entry. It isn't counted in your real totals.">What-if</span>{% endif %}
+              </td>
+              <td class="num">{{ t.amount|inr }}</td>
+              <td class="num">₹{{ t.nav|num(2) }}</td>
+              <td class="num">{{ '−' if t.txn_type == 'sell' else '+' }}{{ t.units|num(3) }}</td>
+              <td class="small muted">{{ t.note or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if txns|selectattr('is_simulated')|list %}<p class="chart-summary">Dashed, italic rows are what-if entries. They don't count towards your real totals.</p>{% endif %}
+      {% else %}
+        {{ m.empty('receipt', 'No transactions yet', 'Record your SIPs or purchases for this fund to see your units, value and XIRR here.', '/transactions', 'Record a transaction') }}
+      {% endif %}
+    </section>
+
+    <section class="panel span-4" aria-labelledby="fc-h">
+      <div class="panel-head"><h2 id="fc-h">Next 30 days</h2><a class="small" href="/forecasts?code={{ code }}">Full forecast</a></div>
+      {% if forecast and forecast.forecasts %}
+        {% set fns = namespace(row=none, skill=none, cov=none) %}
+        {% for row in forecast.forecasts %}{% if row.horizon_days == 30 %}{% set fns.row = row %}{% endif %}{% endfor %}
+        {% if fns.row is none %}{% set fns.row = forecast.forecasts|last %}{% endif %}
+        {% for mrow in forecast.metrics or [] %}{% if mrow.model == 'hybrid' and mrow.horizon_days == 30 %}{% set fns.skill = mrow.skill_vs_naive %}{% set fns.cov = mrow.coverage80 %}{% endif %}{% endfor %}
+        {% set fr = fns.row %}
+        {% if fr.lo80 is not none and fr.hi80 is not none %}
+          <p class="small muted" style="margin-bottom:4px">Likely {{ term('nav', 'NAV') }} range in {{ fr.horizon_days }} days ({{ term('forecast range', '80% range') }})</p>
+          <div class="fc-range">₹{{ fr.lo80|num(2) }} – ₹{{ fr.hi80|num(2) }}</div>
+          {% if latest.value %}
+            <p class="small" style="margin:2px 0 12px">{{ ((fr.lo80 / latest.value - 1) * 100)|pct }} to {{ ((fr.hi80 / latest.value - 1) * 100)|pct }} from today</p>
+          {% endif %}
+        {% endif %}
+        {% if fns.skill is not none %}
+          {% if fns.skill > 0 %}
+            <span class="chip gain"><i data-lucide="target" aria-hidden="true"></i>Skill: {{ '%.0f'|format(fns.skill * 100) }}% better than a simple guess</span>
+            <p class="small muted" style="margin-top:8px">In past tests, this range was closer to the real NAV than assuming "it stays the same".</p>
+          {% else %}
+            <span class="chip warn"><i data-lucide="target" aria-hidden="true"></i>No skill yet</span>
+            <p class="small muted" style="margin-top:8px">For this fund, our model hasn't beaten a simple "stays the same" guess. Treat the range as a rough idea of how much it can move.</p>
+          {% endif %}
+        {% endif %}
+        {% if fns.cov is not none %}
+          <p class="small muted" style="margin:0 0 8px">Past ranges contained the real NAV {{ '%.0f'|format(fns.cov * 100 if fns.cov <= 1 else fns.cov) }}% of the time.</p>
+        {% endif %}
+        <p class="small" style="margin:0"><strong>Educational estimate, not a guarantee or advice.</strong> Run on {{ forecast.run_date|d }}.</p>
+      {% else %}
+        <p class="muted" style="margin:0">No forecast yet. The forecast job runs every Friday night and covers all your funds.</p>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+
+  {# ---------- Data notes ---------- #}
+  <section class="panel" aria-labelledby="notes-h">
+    <div class="panel-head"><h2 id="notes-h" style="font-size:17px">About this data</h2></div>
+    <ul class="notes-list">
+      <li>Latest {{ term('nav', 'NAV') }}: {{ latest.as_of|d }}. NAVs come from <a href="https://www.mfapi.in/" target="_blank" rel="noopener">mfapi.in</a>, published once per business day after markets close. They are not live prices.</li>
+      {% if has_bench %}
+        {% if bench.source == 'proxy' %}<li>Benchmark measured via an index fund that tracks it.</li>
+        {% elif bench.source == 'yahoo' %}<li>Benchmark levels come from Yahoo Finance.</li>
+        {% else %}<li>We don't have benchmark prices for this fund yet.</li>{% endif %}
+        <li>Index returns are price returns. Fund NAVs include reinvested dividends, so funds get a small head start in comparisons.</li>
+      {% endif %}
+      {% if peer_count %}<li>The category average is worked out by Mausam from {{ peer_count }} similar funds{% if peer_group %} ({{ peer_group }}){% endif %}.</li>
+      {% elif peer_group %}<li>We haven't found enough similar funds for a category average yet.</li>{% endif %}
+    </ul>
+    <div class="unavailable" style="margin-top:16px">
+      <i data-lucide="eye-off" aria-hidden="true"></i>
+      <div>
+        <strong style="color:var(--ink)">Not available in free data:</strong> holdings, sectors, {{ term('expense ratio', 'expense ratio') }}, AUM, fund manager.
+        Free sources only publish daily prices. The fund house's monthly factsheet has the rest.
+        <a href="https://www.google.com/search?q={{ (full_name ~ ' factsheet')|urlencode }}" target="_blank" rel="noopener">Search for the factsheet <i data-lucide="external-link" aria-hidden="true" style="width:13px;height:13px;vertical-align:-2px"></i></a>
+      </div>
+    </div>
+  </section>
+</div>
+
+{% set gap_rows = [] %}
+{% for g in gaps %}{% set _ = gap_rows.append({'week': g.week, 'gap': g.gap}) %}{% endfor %}
+{{ m.json_data('fd-config', {'code': code, 'name': fund_name, 'colour': fund.colour if fund else none, 'ref_label': ref_label, 'in_list': fund is not none}) }}
+{{ m.json_data('fd-gaps', gap_rows) }}
+{{ m.json_data('fd-drawdown', drawdown or []) }}
+{{ m.json_data('fd-forecast', forecast) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const cfg = Mausam.data('fd-config') || {};
+  const gaps = Mausam.data('fd-gaps') || [];
+  const dd = Mausam.data('fd-drawdown') || [];
+  const fcBundle = Mausam.data('fd-forecast');
+  const $ = (id) => document.getElementById(id);
+  const num = (v) => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
+  const RANGE_WORDS = { '1M': 'the last month', '3M': 'the last 3 months', '6M': 'the last 6 months', '1Y': 'the last year', '3Y': 'the last 3 years', 'ALL': 'its whole history' };
+
+  // ---------- forecast band (defensive about shape) ----------
+  function forecastPoints() {
+    if (!fcBundle || !Array.isArray(fcBundle.forecasts) || !fcBundle.forecasts.length) return null;
+    const rows = fcBundle.forecasts;
+    const row = rows.find((r) => Number(r.horizon_days) === 30) || rows[rows.length - 1];
+    let path = row && row.path;
+    if (typeof path === 'string') { try { path = JSON.parse(path); } catch (e) { path = null; } }
+    let pts = [];
+    if (Array.isArray(path) && path.length) {
+      pts = path.map((p) => ({ x: p.date || p.target_date, lo: num(p.lo80), hi: num(p.hi80), mid: num(p.median ?? p.point) }))
+        .filter((p) => p.x && p.lo !== null && p.hi !== null);
+    }
+    if (!pts.length) {
+      pts = rows.filter((r) => r.target_date && num(r.lo80) !== null && num(r.hi80) !== null)
+        .map((r) => ({ x: r.target_date, lo: num(r.lo80), hi: num(r.hi80), mid: num(r.point) }));
+    }
+    return pts.length ? pts : null;
+  }
+  const fcPts = forecastPoints();
+
+  // ---------- NAV chart ----------
+  const state = { range: '1Y', bench: true, cat: true, fc: false };
+  const cache = {};
+  const navState = $('nav-state');
+  const ovBench = $('ov-bench'), ovCat = $('ov-cat'), ovFc = $('ov-fc');
+
+  function setAvailable(input, ok, why) {
+    input.disabled = !ok;
+    const wrap = input.closest('label');
+    wrap.setAttribute('aria-disabled', ok ? 'false' : 'true');
+    if (!ok) wrap.setAttribute('data-tip', why); else wrap.removeAttribute('data-tip');
+  }
+  setAvailable(ovFc, !!fcPts, 'No forecast yet for this fund.');
+
+  function change(points) {
+    if (!points || points.length < 2) return null;
+    const a = points[0][1], b = points[points.length - 1][1];
+    return a > 0 ? (b / a - 1) * 100 : null;
+  }
+
+  function drawNav(data) {
+    const P = Mausam.palette();
+    const main = cfg.colour || P.monsoon;
+    const nav = data.nav || [];
+    const datasets = [{ label: cfg.name || 'This fund', data: nav.map(([x, y]) => ({ x, y })), borderColor: main,
+      backgroundColor: Mausam.alpha(main.startsWith('#') ? main : P.monsoon, 0.08), fill: false, tension: 0.15, order: 1 }];
+    const hasBench = !!(data.benchmark && data.benchmark.points && data.benchmark.points.length);
+    const hasCat = !!(data.category && data.category.points && data.category.points.length);
+    setAvailable(ovBench, hasBench, cfg.in_list ? 'No benchmark prices for this period.' : 'Add this fund to your list to compare it with its benchmark.');
+    setAvailable(ovCat, hasCat, cfg.in_list ? 'No category average for this period yet.' : 'Add this fund to your list to see the category average.');
+    if (hasBench && state.bench) {
+      datasets.push({ label: (data.benchmark.label || 'Benchmark') + ' (rebased)', data: data.benchmark.points.map(([x, y]) => ({ x, y })),
+        borderColor: P.slate, borderDash: [6, 4], borderWidth: 1.6, fill: false, order: 2 });
+    }
+    if (hasCat && state.cat) {
+      datasets.push({ label: `Category average (${data.category.peer_count || 0} funds, rebased)`, data: data.category.points.map(([x, y]) => ({ x, y })),
+        borderColor: P.saffron, borderDash: [2, 3], borderWidth: 1.6, fill: false, order: 3 });
+    }
+    if (fcPts && state.fc && nav.length) {
+      const last = nav[nav.length - 1];
+      const pts = [{ x: last[0], lo: last[1], hi: last[1], mid: last[1] }].concat(fcPts.filter((p) => p.x > last[0]));
+      datasets.push({ label: '80% low', data: pts.map((p) => ({ x: p.x, y: p.lo })), borderWidth: 0, borderColor: 'transparent', fill: false, order: 5 });
+      datasets.push({ label: 'Likely range, next 30 days (80%)', data: pts.map((p) => ({ x: p.x, y: p.hi })), borderWidth: 0, borderColor: Mausam.alpha(P.plum, 0.5),
+        backgroundColor: Mausam.alpha(P.plum, 0.18), fill: '-1', order: 5 });
+      if (pts.some((p) => p.mid !== null)) {
+        datasets.push({ label: 'Middle of the range', data: pts.filter((p) => p.mid !== null).map((p) => ({ x: p.x, y: p.mid })),
+          borderColor: P.plum, borderWidth: 1, borderDash: [3, 3], fill: false, order: 4 });
+      }
+    }
+    Mausam.chart('nav-chart', {
+      type: 'line',
+      data: { datasets },
+      options: {
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        scales: { x: Mausam.timeScale(), y: { ticks: { callback: (v) => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) } } },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { filter: (item) => item.text !== '80% low' } },
+          tooltip: { filter: (item) => item.dataset.label !== '80% low',
+            callbacks: { label: (c) => `${c.dataset.label}: ₹${Number(c.raw.y).toFixed(2)}` } },
+        },
+      },
+    });
+
+    // Plain-language summary
+    const fundCh = change(nav);
+    let s = '';
+    if (fundCh !== null) {
+      s = `Over ${RANGE_WORDS[state.range] || 'this period'}, the NAV went from ₹${nav[0][1].toFixed(2)} to ₹${nav[nav.length - 1][1].toFixed(2)} (${Mausam.pct(fundCh, 1, false)}).`;
+      const bCh = hasBench ? change(data.benchmark.points) : null;
+      if (bCh !== null) {
+        const g = fundCh - bCh;
+        s += ` ${data.benchmark.label || 'The benchmark'} moved ${Mausam.pct(bCh, 1, false)}, so the fund is ${Math.abs(g).toFixed(1)} points ${g >= 0 ? 'ahead' : 'behind'}.`;
+      }
+      if (state.fc && fcPts) {
+        const end = fcPts[fcPts.length - 1];
+        s += ` The shaded band is where the NAV will likely sit over the next 30 days: ₹${end.lo.toFixed(2)} to ₹${end.hi.toFixed(2)}. It's an estimate, not a promise.`;
+      }
+    } else {
+      s = 'Not enough prices in this range to draw a line. Try a longer range.';
+    }
+    $('nav-sum').textContent = s;
+  }
+
+  async function loadNav() {
+    const range = state.range;
+    try {
+      if (!cache[range]) {
+        navState.hidden = false;
+        navState.innerHTML = '<div class="skeleton" aria-hidden="true"></div><span class="sr-only">Loading prices…</span>';
+        cache[range] = await Mausam.api('GET', `/api/funds/${cfg.code}/nav?range=${encodeURIComponent(range)}`);
+      }
+      if (range !== state.range) return;
+      navState.hidden = true;
+      drawNav(cache[range]);
+    } catch (e) {
+      navState.hidden = false;
+      navState.innerHTML = `<div><p style="margin:0 0 10px">We couldn't load the price history. ${Mausam.esc(e.message)}</p><button type="button" class="btn btn-sm" id="nav-retry">Try again</button></div>`;
+      const retry = $('nav-retry');
+      if (retry) retry.addEventListener('click', loadNav);
+    }
+  }
+
+  document.querySelectorAll('#nav-range button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('#nav-range button').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    state.range = b.dataset.range;
+    loadNav();
+  }));
+  ovBench.addEventListener('change', () => { state.bench = ovBench.checked; if (cache[state.range]) drawNav(cache[state.range]); });
+  ovCat.addEventListener('change', () => { state.cat = ovCat.checked; if (cache[state.range]) drawNav(cache[state.range]); });
+  ovFc.addEventListener('change', () => { state.fc = ovFc.checked; if (cache[state.range]) drawNav(cache[state.range]); });
+  loadNav();
+
+  // ---------- static charts ----------
+  function drawStatic() {
+    const P = Mausam.palette();
+    if (gaps.length && $('gap-chart')) {
+      Mausam.chart('gap-chart', {
+        type: 'bar',
+        data: { labels: gaps.map((g) => Mausam.date(g.week, true)), datasets: [{ label: 'Gap', data: gaps.map((g) => g.gap),
+          backgroundColor: gaps.map((g) => (g.gap === null ? P.line : (g.gap >= 0 ? P.gain : P.loss))), borderRadius: 3, maxBarThickness: 28 }] },
+        options: { plugins: { legend: { display: false }, tooltip: { callbacks: {
+            title: (items) => 'Week ending ' + Mausam.date(gaps[items[0].dataIndex].week),
+            label: (c) => c.raw === null ? 'No figure' : `${c.raw >= 0 ? '▲ Ahead of' : '▼ Behind'} ${cfg.ref_label} by ${Math.abs(c.raw).toFixed(2)} pts` } } },
+          scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (v > 0 ? '+' : '') + v + ' pts' } } } },
+      });
+    }
+    if (dd.length > 2 && $('dd-chart')) {
+      Mausam.chart('dd-chart', {
+        type: 'line',
+        data: { datasets: [{ label: 'Below its high', data: dd.map(([x, y]) => ({ x, y })), borderColor: P.loss, borderWidth: 1.5,
+          backgroundColor: Mausam.alpha(P.loss.startsWith('#') ? P.loss : '#C2412D', 0.15), fill: 'origin', tension: 0.1 }] },
+        options: { interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${Number(c.raw.y).toFixed(1)}% below its high` } } },
+          scales: { x: Mausam.timeScale(), y: { max: 0, ticks: { callback: (v) => v + '%' } } } },
+      });
+    }
+  }
+  drawStatic();
+  document.addEventListener('mausam:theme', () => { drawStatic(); if (cache[state.range]) drawNav(cache[state.range]); });
+})();
+</script>
+{% endblock %}
