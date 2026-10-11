@@ -218,6 +218,8 @@
       const dark = root.getAttribute('data-theme') === 'dark' ||
         (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       if (themeBtn) themeBtn.innerHTML = `<i data-lucide="${dark ? 'sun' : 'moon'}" aria-hidden="true"></i>`;
+      themeBtn.setAttribute('aria-label', dark ? 'Switch to day' : 'Switch to night');
+      themeBtn.title = dark ? 'Switch to day' : 'Switch to night';
       icons();
     };
     if (themeBtn) themeBtn.addEventListener('click', () => {
@@ -226,6 +228,7 @@
       const next = dark ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
       try { localStorage.setItem('mausam-theme', next); } catch (e) {}
+      updateMode();
       setIcon();
       chartDefaults();
       Object.values(charts).forEach((c) => c.update());
@@ -247,8 +250,93 @@
     setIcon();
   }
 
+  // ---------- sky scene: day/night, stars, rain ----------
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function updateMode() {
+    const root = document.documentElement;
+    const theme = root.getAttribute('data-theme');
+    const night = theme ? theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-mode', night ? 'night' : 'day');
+  }
+
+  function makeStars() {
+    const box = $('.sky-scene .stars');
+    if (!box || box.childElementCount) return;
+    const n = Math.round(Math.min(140, (window.innerWidth * window.innerHeight) / 9000));
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      const size = Math.random() < 0.85 ? 1 + Math.random() * 1.4 : 2.4 + Math.random();
+      s.className = 'star';
+      s.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 100}%;width:${size}px;height:${size}px;` +
+        `animation-delay:${(-Math.random() * 4).toFixed(2)}s;animation-duration:${(2.5 + Math.random() * 3).toFixed(2)}s`;
+      box.appendChild(s);
+    }
+  }
+
+  function startRain() {
+    const canvas = $('#rain-canvas');
+    if (!canvas || !document.body.classList.contains('sky-storm')) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = 0, h = 0, drops = [], frame = null;
+    const wind = -1.6;   // pixels sideways per frame: rain leans slightly
+
+    function newDrop(anywhere) {
+      const z = Math.random();   // depth: far drops are thinner, slower and fainter
+      return { x: Math.random() * (w + 200), y: anywhere ? Math.random() * h : -20 - Math.random() * 100,
+               len: 10 + z * 18, speed: 9 + z * 13, width: 0.6 + z * 1.1, alpha: 0.25 + z * 0.45 };
+    }
+    function resize() {
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const count = Math.round(Math.min(420, (w * h) / 4200));
+      drops = Array.from({ length: count }, () => newDrop(true));
+    }
+    function colour(alpha) {
+      const night = document.documentElement.getAttribute('data-mode') === 'night';
+      return night ? `rgba(170, 190, 225, ${alpha * 0.8})` : `rgba(235, 242, 252, ${alpha})`;
+    }
+    function draw(step) {
+      ctx.clearRect(0, 0, w, h);
+      ctx.lineCap = 'round';
+      for (const d of drops) {
+        ctx.strokeStyle = colour(d.alpha);
+        ctx.lineWidth = d.width;
+        ctx.beginPath();
+        ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x + wind * (d.len / d.speed), d.y + d.len);
+        ctx.stroke();
+        if (!step) continue;
+        d.x += wind; d.y += d.speed;
+        if (d.y > h) {
+          // a tiny splash where the drop lands, then a new drop starts at the top
+          ctx.strokeStyle = colour(d.alpha * 0.6);
+          ctx.beginPath(); ctx.arc(d.x, h - 2, 2 + d.width * 2, Math.PI, 2 * Math.PI); ctx.stroke();
+          Object.assign(d, newDrop(false));
+        }
+        if (d.x < -50) d.x = w + 50;
+      }
+    }
+    function loop() { draw(true); frame = requestAnimationFrame(loop); }
+    resize();
+    window.addEventListener('resize', () => { resize(); if (reducedMotion()) draw(false); });
+    if (reducedMotion()) { draw(false); return; }   // still raining, just not moving
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { cancelAnimationFrame(frame); frame = null; } else if (!frame) loop();
+    });
+    loop();
+  }
+
+  updateMode();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateMode);
+  document.addEventListener('mausam:theme', updateMode);
+
   chartDefaults();
   document.addEventListener('DOMContentLoaded', () => {
+    makeStars();
+    startRain();
     initShell();
     $$('table[data-sortable]').forEach(sortable);
     icons();

@@ -40,7 +40,7 @@ def job_run(name: str):
         details["error"] = f"{type(exc).__name__}: {exc}"[:500]
         details["trace"] = traceback.format_exc()[-1500:]
         try:
-            alerts.create(None, "job_failed", "action", f"The {name} job failed: {str(exc)[:160]}", link="/status")
+            alerts.create(None, "job_failed", "action", f"The {name} job failed: {str(exc)[:160]}", link="/reports")
         except Exception:  # noqa: BLE001
             pass
         raise

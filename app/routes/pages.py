@@ -7,7 +7,7 @@ from flask import Blueprint, abort, render_template, request
 
 from .. import db
 from ..config import config
-from ..services import (alerts, assistant, benchmarks, category, glossary, indices, mfapi, news, portfolio, returns,
+from ..services import (alerts, assistant, benchmarks, category, indices, mfapi, news, portfolio, returns,
                         snapshots)
 from ..services import report as report_service
 from ..services.verdict import weather
@@ -51,7 +51,7 @@ def today():
     cards = {c["key"]: c for c in index_cards()}
     strip = [cards.get(k) for k in ("NIFTY50", "MIDCAP150", "SMALLCAP100", "SP500") if cards.get(k)]
     return render_template(
-        "today.html", summary=summ, report=rep, sky=weather(rep["verdict"] if rep else None),
+        "today.html", summary=summ, report=rep,
         tip=assistant.latest_tip(), tiles=tiles, sips=portfolio.next_sips(uid), strip=strip,
         news=news.latest(3), alerts=alerts.recent(uid, limit=3, unread_only=True),
     )
@@ -226,12 +226,6 @@ def ask():
     return render_template("ask.html", history=assistant.history(user_id()), starters=assistant.STARTERS)
 
 
-# ---------- Page 13: Learn ----------
-@bp.get("/learn")
-def learn():
-    return render_template("learn.html", terms=glossary.as_list(), explainers=glossary.EXPLAINERS)
-
-
 # ---------- Page 14: Alerts ----------
 @bp.get("/alerts")
 def alerts_page():
@@ -244,42 +238,3 @@ def settings():
     from .api_settings import get_settings
 
     return render_template("settings.html", settings=get_settings(user_id()), config_status=config.status())
-
-
-# ---------- Page 16: System status ----------
-@bp.get("/status")
-def status():
-    uid = user_id()
-    funds = portfolio.active_funds(uid)
-    navs = portfolio.latest_navs([f["scheme_code"] for f in funds])
-    # Where each fund's latest NAV came from: mfapi.in, or the AMFI NAVAll.txt fallback.
-    sources = {r["scheme_code"]: r["source"] for r in db.query(
-        """SELECT DISTINCT ON (scheme_code) scheme_code, COALESCE(source, 'mfapi') AS source FROM nav_history
-           WHERE scheme_code = ANY(%s) ORDER BY scheme_code, nav_date DESC""", [[f["scheme_code"] for f in funds]])} if funds else {}
-    fund_fresh = [{"name": f["short_name"] or f["scheme_name"], "code": f["scheme_code"],
-                   "last": (navs.get(f["scheme_code"]) or {}).get("nav_date"),
-                   "source": sources.get(f["scheme_code"]),
-                   "stale": returns.is_stale((navs.get(f["scheme_code"]) or {}).get("nav_date"), date.today())} for f in funds]
-    last_nav_job = db.one("""SELECT started_at, details FROM job_runs WHERE job IN ('daily_nav', 'manual_refresh', 'weekly_report', 'manual_report')
-                             AND details ? 'nav_sources' ORDER BY started_at DESC LIMIT 1""")
-    idx_last = indices.latest_index_dates()
-    index_fresh = []
-    for b in indices.benchmarks():
-        if b["key"] == "CATEGORY_ONLY":
-            continue
-        s = indices.benchmark_series(b["key"], date.today() - timedelta(days=60), min_rows=5) if b["key"] != "USDINR" else None
-        last_idx = s["rows"][-1][0] if s and s["rows"] else idx_last.get(b["key"])
-        index_fresh.append({"key": b["key"], "name": b["name"], "ticker": b["yahoo_ticker"], "proxy": b["proxy_scheme_code"],
-                            "last_yahoo": idx_last.get(b["key"]), "source": (s or {}).get("source") or ("yahoo" if idx_last.get(b["key"]) else None),
-                            "last": last_idx, "stale": returns.is_stale(last_idx, date.today())})
-    jobs_rows = db.query("SELECT * FROM job_runs ORDER BY started_at DESC LIMIT 20")
-    weeks_reported = db.scalar("SELECT COUNT(*) FROM reports WHERE user_id = %s", [uid])
-    return render_template("status.html", fund_fresh=fund_fresh, index_fresh=index_fresh, jobs=jobs_rows,
-                           repo=config.GITHUB_REPO, config_status=config.status(), weeks_reported=weeks_reported,
-                           gemini_model=config.GEMINI_MODEL, today=date.today(), last_nav_job=last_nav_job)
-
-
-# ---------- Page 17: About ----------
-@bp.get("/about")
-def about():
-    return render_template("about.html", repo=config.GITHUB_REPO)

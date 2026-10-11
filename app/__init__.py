@@ -101,6 +101,6 @@ def create_app():
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "data": None, "error": "Something went wrong on our side. Please try again."}), 500
         return render_template("error.html", code=500, title="Something went wrong",
-                               message="Mausam hit an unexpected problem. Your data is safe. Try again, or check System status."), 500
+                               message="Mausam hit an unexpected problem. Your data is safe. Please try again in a minute."), 500
 
     return app

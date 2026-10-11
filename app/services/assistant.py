@@ -166,7 +166,7 @@ def ask(user_id: int, question: str) -> dict:
                 break
             prompt += "\n\nYour previous answer broke these rules, rewrite it: " + "; ".join(errors)
     else:
-        answer = "The AI helper isn't set up yet (no Gemini key). Meanwhile, the Learn page explains every term in the app."
+        answer = "The AI helper isn't set up yet (no Gemini key). Meanwhile, hover any underlined term in the app for a plain explanation."
     db.execute("INSERT INTO chat_messages (user_id, role, content) VALUES (%s, 'user', %s)", [user_id, question])
     db.execute("INSERT INTO chat_messages (user_id, role, content) VALUES (%s, 'assistant', %s)", [user_id, answer])
     return {"answer": answer, "guardrails_passed": ok, "meta": {k: v for k, v in meta.items() if k != "tokens_in"}}

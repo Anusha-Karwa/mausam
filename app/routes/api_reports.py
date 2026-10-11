@@ -35,7 +35,7 @@ def generate():
     try:
         result = jobs.weekly_report(trigger="manual", user_id=user_id())
     except Exception as exc:  # noqa: BLE001
-        return fail(f"Report generation failed: {str(exc)[:200]}. Details are on the System status page.", 500)
+        return fail(f"Report generation failed: {str(exc)[:200]}. Please try again in a few minutes.", 500)
     return ok({"week": result["week"], "verdict": result["report"]["verdict"],
                "used_fallback": result["report"]["used_fallback"], "email": result.get("email"),
                "fallbacks": result.get("fallbacks")})

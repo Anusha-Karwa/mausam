@@ -17,7 +17,7 @@
       <p class="muted" style="max-width:520px;margin-bottom:12px">{{ report.verdict }}. {{ report.verdict_reason }}</p>
       <span class="hero-cta">Read this week's report <i data-lucide="arrow-right" aria-hidden="true"></i></span>
     </div>
-    <div class="hero-sky">{% with kind=sky.key, animate=true %}{% include "partials/weather_sky.html" %}{% endwith %}</div>
+    <div class="hero-sky" aria-hidden="true"></div>
   </a>
   {% else %}
   <div class="hero unknown">
@@ -31,7 +31,7 @@
       <a class="btn btn-primary" href="/manage"><i data-lucide="plus" aria-hidden="true"></i>Add your first fund</a>
       {% endif %}
     </div>
-    <div class="hero-sky">{% with kind='unknown', animate=true %}{% include "partials/weather_sky.html" %}{% endwith %}</div>
+    <div class="hero-sky" aria-hidden="true"></div>
   </div>
   {% endif %}
 

@@ -23,11 +23,8 @@ NAV = [
     {"href": "/manage", "label": "Manage funds", "icon": "list-plus"},
     {"href": "/calculators", "label": "Calculators", "icon": "calculator"},
     {"href": "/ask", "label": "Ask Mausam", "icon": "message-circle"},
-    {"href": "/learn", "label": "Learn", "icon": "book-open"},
     {"href": "/alerts", "label": "Alerts", "icon": "bell"},
     {"href": "/settings", "label": "Settings", "icon": "settings"},
-    {"href": "/status", "label": "System status", "icon": "server"},
-    {"href": "/about", "label": "About", "icon": "info"},
 ]
 
 
@@ -157,7 +154,7 @@ def register(app) -> None:
         from .services.returns import is_stale
 
         ctx = {"csrf_token": getattr(g, "csrf_token", ""), "current_path": request.path,
-               "data_as_of": None, "fresh": None, "unread_alerts": 0, "platform_url": config.INVESTING_PLATFORM_URL}
+               "data_as_of": None, "fresh": None, "sky": weather(None), "unread_alerts": 0, "platform_url": config.INVESTING_PLATFORM_URL}
         if not config.DATABASE_URL:
             return ctx
         try:
@@ -166,9 +163,19 @@ def register(app) -> None:
             d = row["d"] if row else None
             ctx["data_as_of"] = d
             ctx["fresh"] = (d is not None) and not is_stale(d, date.today())
+            # The whole screen shows this week's weather (pages like a report detail can pass their own `sky`).
+            latest_verdict = db.scalar("SELECT verdict FROM reports WHERE user_id = %s ORDER BY week_ending DESC LIMIT 1",
+                                       [getattr(g, "user_id", 1)])
+            ctx["sky"] = weather(latest_verdict)
             ctx["unread_alerts"] = int(db.scalar(
                 "SELECT COUNT(*) FROM alerts WHERE (user_id = %s OR user_id IS NULL) AND read_at IS NULL",
                 [getattr(g, "user_id", 1)]) or 0)
         except Exception:  # noqa: BLE001 - layout must render even if the DB is down
             pass
+        # Demo preview: ?sky=clear|clouds|storm shows that weather on any page.
+        preview = {"clear": "No action needed", "clouds": "One fund worth watching",
+                   "storm": "Consider reviewing your allocation"}.get(request.args.get("sky", ""))
+        if preview:
+            ctx["sky"] = weather(preview)
+            ctx["sky_preview"] = True
         return ctx
