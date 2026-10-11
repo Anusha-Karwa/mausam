@@ -62,7 +62,7 @@ small, .small { font-size: 13px; }
 .num, table td.num, .tabular { font-variant-numeric: tabular-nums; }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
 :focus-visible { outline: 3px solid var(--saffron); outline-offset: 2px; border-radius: 4px; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+.sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 .skip-link { position: absolute; left: -999px; top: 8px; background: var(--surface); padding: 8px 12px; border-radius: var(--r-sm); z-index: 100; }
 .skip-link:focus { left: 8px; }
 [hidden] { display: none !important; }
@@ -218,7 +218,7 @@ input[type=range] { width: 100%; accent-color: var(--monsoon); }
 }
 
 /* ---------- tables ---------- */
-.table-wrap { overflow-x: auto; margin: 0 -4px; }
+.table-wrap { overflow-x: auto; margin: 0 -4px; position: relative; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; font-weight: 600; color: var(--slate); font-size: 13px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
