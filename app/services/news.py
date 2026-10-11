@@ -6,6 +6,7 @@ NewsAPI.org is deliberately NOT used: its free plan only works on localhost.
 """
 from __future__ import annotations
 
+import html
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -106,7 +107,7 @@ def fetch_gnews(start: datetime, end: datetime, queries: list[str] | None = None
             errors.append(str(exc)[:120])
             continue
         for a in payload.get("articles") or []:
-            items.append({"title": (a.get("title") or "").strip(), "url": a.get("url"),
+            items.append({"title": html.unescape(a.get("title") or "").strip(), "url": a.get("url"),
                           "source": ((a.get("source") or {}).get("name")) or "GNews",
                           "published_at": _parse_iso(a.get("publishedAt"))})
     if not items and errors:
@@ -130,7 +131,7 @@ def fetch_rss(start: datetime | None = None) -> list[dict]:
                 published = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
             if start and published and published < start:
                 continue
-            items.append({"title": (e.get("title") or "").strip(), "url": e.get("link"), "source": source,
+            items.append({"title": html.unescape(e.get("title") or "").strip(), "url": e.get("link"), "source": source,
                           "published_at": published})
     return items
 
