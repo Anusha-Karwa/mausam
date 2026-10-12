@@ -20,7 +20,9 @@ TIP_SCHEMA = {"type": "OBJECT", "properties": {"tip": {"type": "STRING"}}, "requ
 CHAT_SYSTEM = """You are "Ask Mausam", a friendly helper inside a personal mutual fund tracker. You speak to one beginner investor as "you".
 Rules:
 - Answer ONLY about her funds, mutual fund concepts, and how this app works. Politely refuse anything else in one sentence.
-- Plain language, short paragraphs, at most 160 words. Explain jargon simply.
+- Plain language, at most 90 words, in 1-3 short paragraphs. Lead with the direct answer ("Yes, it's doing fine" / "It fell, but so did its market").
+- Write numbers the way a person would say them: rupees with Indian commas and no decimals (₹74,000, ₹6,45,415), percentages with one decimal (3.7%), dates like "9 Oct". Never write "rupees" after a number, never show raw decimals like 0.0013.
+- Prefer everyday words: say "its market" for benchmark, "similar funds" for category average, "yearly growth" for XIRR (you may add the term in brackets once).
 - Use ONLY numbers that appear in the context. Never calculate new figures. If a number isn't in the context, say you don't have it.
 - Never tell her to buy, sell, switch, redeem, stop or start a SIP or fund, and never say what you "recommend" or "suggest".
   If she asks what to do, explain the considerations and say: "a SEBI-registered adviser can help with that decision."
@@ -51,7 +53,7 @@ def tip_facts(user_id: int, today: date) -> dict:
     entry = next(v for v in glossary.GLOSSARY.values() if v["term"] == term)
     return {
         "portfolio_change_rupees": summ["day_change"], "portfolio_change_pct": summ["day_change_pct"],
-        "nav_date": summ["as_of"].isoformat() if summ["as_of"] else None,
+        "nav_date": _day(summ["as_of"]),
         "biggest_mover": ({"fund": movers[0]["name"], "change_pct": movers[0]["day_change_pct"]} if movers else None),
         "next_sip": ({"fund": sips[0]["name"], "amount_rupees": sips[0]["amount"], "days_away": sips[0]["days"]} if sips else None),
         "term": term, "term_definition": entry["short"],
@@ -95,13 +97,28 @@ def latest_tip() -> dict | None:
 
 # ---------- chat ----------
 
+def _round(obj, places: int = 2):
+    """Round every float in a nested structure so Gemini sees clean numbers."""
+    if isinstance(obj, float):
+        return round(obj, places)
+    if isinstance(obj, dict):
+        return {k: _round(v, places) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_round(v, places) for v in obj]
+    return obj
+
+
+def _day(d) -> str | None:
+    return f"{d.day} {d.strftime('%b %Y')}" if d else None
+
+
 def chat_context(user_id: int) -> dict:
     """Everything the chat may use. No name, no email."""
     summ = portfolio.summary(user_id)
     week = snapshots.latest_week(user_id)
     snaps = snapshots.for_week(user_id, week) if week else []
     rep = report_service.latest(user_id)
-    return {
+    return _round({
         "portfolio": {
             "invested_rupees": summ["invested"], "value_rupees": summ["value"], "gain_rupees": summ["gain"],
             "gain_pct": summ["gain_pct"], "xirr_pct": summ["xirr"], "nav_date": summ["as_of"].isoformat() if summ["as_of"] else None,
@@ -110,20 +127,20 @@ def chat_context(user_id: int) -> dict:
                        "gain_pct": f["gain_pct"], "xirr_pct": f["xirr"], "weight_pct": f["weight"]} for f in summ["funds"]],
         },
         "latest_week": {
-            "week_ending": week.isoformat() if week else None,
+            "week_ending": _day(week),
             "funds": [{"name": s["short_name"] or s["scheme_name"], "ret_1w": s["ret_1w"], "ret_1m": s["ret_1m"],
                        "ret_ytd": s["ret_ytd"], "ret_1y": s["ret_1y"], "bench_ret_1w": s["bench_ret_1w"],
                        "cat_ret_1w": s["cat_ret_1w"], "gap_vs_benchmark_1w_pts": s["delta_bench_1w"],
                        "move_type": s["attribution"]} for s in snaps],
         },
-        "latest_report": ({"week_ending": rep["week_ending"].isoformat(), "verdict": rep["verdict"],
+        "latest_report": ({"week_ending": _day(rep["week_ending"]), "verdict": rep["verdict"],
                            "verdict_reason": rep["verdict_reason"],
                            "headline": (rep["report_json"] or {}).get("headline"),
                            "market_paragraph": (rep["report_json"] or {}).get("market_paragraph"),
                            "fund_summaries": {f["name"]: f["summary"] for f in (rep["report_json"] or {}).get("funds", [])}}
                           if rep else None),
         "glossary": glossary.compact(),
-    }
+    })
 
 
 def history(user_id: int, limit: int = 50) -> list[dict]:
