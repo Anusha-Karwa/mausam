@@ -4,6 +4,8 @@
 {% block head %}<style>
 .report-strip { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--surface) 84%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.fund-tile .week-ret { font-family: var(--font-head); font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fund-tile .week-ret small { font-family: var(--font-body); font-size: 12px; font-weight: 400; }
 .report-strip-text { display: flex; gap: 10px; align-items: center; min-width: 0; }
 .report-strip-text svg { width: 20px; height: 20px; color: var(--monsoon); flex: none; }
 </style>{% endblock %}
@@ -56,38 +58,35 @@
   <div class="panel">{{ m.empty('list-plus', 'Add your funds to get started', 'Type a fund name or its scheme code on the Manage funds page. Mausam fetches its full history automatically.', '/manage', 'Add a fund') }}</div>
   {% else %}
 
-  {# ---- Value band ---- #}
+  {# ---- This week in numbers (all-time totals live on My portfolio) ---- #}
   <section class="panel" aria-labelledby="value-h">
-    <h2 id="value-h" class="sr-only">Your portfolio value</h2>
+    <div class="panel-head"><h2 id="value-h" style="font-size:17px">This week in numbers</h2><a href="/portfolio" class="small">All-time totals on My portfolio</a></div>
     <div class="value-band">
       <div class="stat">
-        <span class="stat-label">Your money today</span>
-        <span class="stat-value xl">{{ summary.value|inr }}</span>
-        <span class="stat-sub">
-          {% if summary.day_change_pct is not none %}
-            <span class="num {{ summary.day_change|signed_class }}">{{ summary.day_change|inr(signed=true) }} ({{ summary.day_change_pct|pct(arrow=false) }})</span>
-            <span class="muted">on {{ summary.as_of|d('short') }}</span>
-          {% else %}<span class="muted">No daily change yet</span>{% endif %}
-        </span>
+        <span class="stat-label">Your money this week</span>
+        {% if week.change is not none %}
+          <span class="stat-value xl {{ week.change|signed_class }}">{{ week.change|inr(signed=true) }}</span>
+          <span class="stat-sub">{{ week.pct|pct }} since last week</span>
+        {% else %}<span class="stat-value muted">–</span><span class="stat-sub muted">Not enough NAV data yet</span>{% endif %}
       </div>
       <div class="stat">
-        <span class="stat-label">You have earned</span>
-        <span class="stat-value">{{ summary.gain|money(signed=true) }}</span>
-        <span class="stat-sub">{{ summary.gain_pct|pct }} on {{ summary.invested|inr }} invested</span>
+        <span class="stat-label">Funds that kept up with {{ term('benchmark', 'their market') }}</span>
+        <span class="stat-value">{{ week.kept_up }} of {{ week.compared }}</span>
+        <span class="stat-sub muted">{{ 'All on track' if week.compared and week.kept_up == week.compared else 'Tap a fund below to see which' }}</span>
       </div>
       <div class="stat">
-        <span class="stat-label">Yearly growth ({{ term('xirr', 'XIRR') }})</span>
-        <span class="stat-value">{{ summary.xirr|pct(arrow=false) }}</span>
-        <span class="stat-sub muted">accounts for when you invested</span>
+        <span class="stat-label">Why they moved</span>
+        <span class="stat-value">{{ week.market_wide }} market-wide</span>
+        <span class="stat-sub muted">{{ week.fund_specific }} fund-specific {{ term('attribution', 'move') }}{{ '' if week.fund_specific == 1 else 's' }}</span>
       </div>
       <div class="stat">
         <span class="stat-label">Next SIP</span>
         {% if sips %}
           {% set s = sips[0] %}
           <span class="stat-value">{{ 'Today' if s.days == 0 else ('in ' ~ s.days ~ (' day' if s.days == 1 else ' days')) }}</span>
-          <span class="stat-sub">Your {{ s.name|lower }} {{ term('sip', 'SIP') }} of {{ s.amount|inr }} is due on {{ s.date|d('short') }}</span>
+          <span class="stat-sub">{{ s.amount|inr }} into {{ s.name|lower }} on {{ s.date|d('short') }}</span>
         {% else %}
-          <span class="stat-value muted">–</span><span class="stat-sub"><a href="/manage">Set SIP dates</a></span>
+          <span class="stat-value muted">–</span><span class="stat-sub"><a href="/transactions#sip-plan">Set your SIP plan</a></span>
         {% endif %}
       </div>
     </div>
@@ -119,12 +118,9 @@
       {% for t in tiles %}
       <a class="fund-tile" href="/funds/{{ t.scheme_code }}" style="--fund: {{ t.colour or 'var(--monsoon)' }}">
         <span class="name">{{ t.name }}</span>
-        <span class="nav">{{ term('nav', 'NAV') }} ₹{{ t.nav|num(2) }} · {{ t.nav_date|d('short') }}</span>
-        <div class="moves">
-          <span>1 day {{ t.day_change_pct|pct }}</span>
-          <span>1 week {{ t.ret_1w|pct }}</span>
-        </div>
-        <canvas class="spark" data-points='{{ t.spark|dumps }}' aria-label="30-day NAV trend" role="img"></canvas>
+        <span class="week-ret">{{ t.ret_1w|pct }} <small class="muted">this week</small></span>
+        <span class="nav">{% if t.week_change is not none %}<span class="num {{ t.week_change|signed_class }}">{{ t.week_change|inr(signed=true) }}</span> on your holding{% else %}&nbsp;{% endif %}</span>
+        <canvas class="spark" data-points='{{ t.spark|dumps }}' aria-label="NAV over the last two weeks" role="img"></canvas>
         <div class="chips">
           {{ m.gap_chip(t.gap, t.gap_ref) }}
           {% if t.attribution %}{{ m.attribution_chip(t.attribution) }}{% endif %}

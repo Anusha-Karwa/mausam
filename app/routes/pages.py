@@ -37,22 +37,39 @@ def today():
     summ = portfolio.summary(uid)
     rep = report_service.latest(uid)
     snaps = _latest_snapshots(uid)
-    sparks = _sparklines([f["scheme_code"] for f in summ["funds"]])
-    tiles = []
+    # Today is about THIS WEEK only; all-time totals live on My portfolio.
+    sparks = _sparklines([f["scheme_code"] for f in summ["funds"]], days=14)
+    tiles, week_change, value_week_ago = [], 0.0, 0.0
     for f in summ["funds"]:
         s = snaps.get(f["fund_id"]) or {}
         gap = s.get("delta_bench_1w") if s.get("delta_bench_1w") is not None else s.get("delta_cat_1w")
-        ret_1w = s.get("ret_1w")
-        # Prefer a live 1-week figure from NAV history when the snapshot is older than the latest NAV.
         rows = sparks.get(f["scheme_code"]) or []
-        tiles.append({**f, "ret_1w": ret_1w, "gap": gap, "gap_ref": "benchmark" if s.get("delta_bench_1w") is not None else "category",
+        # Rupee change over the last 7 days for the units she holds: units x (NAV now - NAV a week ago).
+        series = [(date.fromisoformat(d), v) for d, v in rows]
+        then = returns.value_asof(series, f["nav_date"] - timedelta(days=7)) if f["nav_date"] and series else None
+        change = round(f["units"] * (f["nav"] - then[1]), 2) if then and f["nav"] else None
+        if change is not None:
+            week_change += change
+            value_week_ago += f["units"] * then[1]
+        tiles.append({**f, "ret_1w": s.get("ret_1w"), "gap": gap,
+                      "gap_ref": "benchmark" if s.get("delta_bench_1w") is not None else "category",
                       "attribution": s.get("attribution"), "stale": returns.is_stale(f["nav_date"], date.today()),
-                      "spark": rows})
+                      "week_change": change, "spark": rows})
+    with_gap = [t for t in tiles if t["gap"] is not None]
+    week = {
+        "change": round(week_change, 2) if value_week_ago else None,
+        "pct": round(week_change / value_week_ago * 100, 2) if value_week_ago else None,
+        "kept_up": sum(1 for t in with_gap if t["gap"] >= -0.25),
+        "compared": len(with_gap),
+        "market_wide": sum(1 for t in tiles if t["attribution"] == "market_wide"),
+        "fund_specific": sum(1 for t in tiles if t["attribution"] == "fund_specific"),
+        "best": max(tiles, key=lambda t: t["ret_1w"] if t["ret_1w"] is not None else -999) if tiles else None,
+    }
     cards = {c["key"]: c for c in index_cards()}
     strip = [cards.get(k) for k in ("NIFTY50", "MIDCAP150", "SMALLCAP100", "SP500") if cards.get(k)]
     return render_template(
         "today.html", summary=summ, report=rep,
-        tip=assistant.latest_tip(), tiles=tiles, sips=portfolio.next_sips(uid), strip=strip,
+        tip=assistant.latest_tip(), tiles=tiles, week=week, sips=portfolio.next_sips(uid), strip=strip,
         news=news.latest(3), alerts=alerts.recent(uid, limit=3, unread_only=True),
     )
 
