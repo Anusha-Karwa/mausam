@@ -12,7 +12,7 @@ Each entry: what we decided, why, and where it lives in the code. Dated 11 Oct 2
 
 5. **One source per benchmark series.** An index level (~22,000) and a fund NAV (~158) can't be joined, so `indices.benchmark_series()` picks Yahoo *or* the proxy fund for a whole series, never mixing them. The UI labels proxy data.
 
-6. **AMFI NAVAll.txt as automatic NAV fallback.** The daily job downloads the official file once and uses it for any scheme where mfapi.in failed or is behind. Each `nav_history` row records `source` (mfapi | amfi); `job_runs.details.nav_sources` records the source per scheme; the System status page shows it. The live file has 8 columns (Plan and Option were added), so the parser maps columns by header name. AMFI's TLS chain ends at *Sectigo Public Server Authentication Root R46*, which only recent CA bundles include, so `certifi>=2025.1.31` is pinned.
+6. **AMFI NAVAll.txt as automatic NAV fallback.** The daily job downloads the official file once and uses it for any scheme where mfapi.in failed or is behind. Each `nav_history` row records `source` (mfapi | amfi); `job_runs.details.nav_sources` records the source per scheme; Settings → Behind the scenes shows it. The live file has 8 columns (Plan and Option were added), so the parser maps columns by header name. AMFI's TLS chain ends at *Sectigo Public Server Authentication Root R46*, which only recent CA bundles include, so `certifi>=2025.1.31` is pinned.
 
 7. **News: Moneycontrol RSS dropped.** Its feeds stopped updating in April 2024. RSS fallback uses Economic Times Markets, Business Standard Markets and ET Mutual Funds. NewsAPI.org is not used (free plan only works on localhost).
 
@@ -33,5 +33,15 @@ Each entry: what we decided, why, and where it lives in the code. Dated 11 Oct 2
 15. **CSRF:** double-submit cookie (`mausam_csrf` cookie + `X-CSRF-Token` header) on every write API. Cron and admin routes use the Bearer secret instead.
 
 16. **No login.** Single-user demo for examiners. Risk recorded in `RISK_REGISTER.md`; every table already has `user_id` for multi-user later.
+
+18. **Pages simplified (12 Oct 2026).** Learn, System status and About were removed to keep the menu small; page names were rewritten in plain words and grouped into three sidebar sections. The job log moved into Settings → Behind the scenes, and Ask Mausam became a floating chat bubble on every page.
+
+19. **Today vs My portfolio.** Today shows only this week's numbers; all-time totals live only on My portfolio, so no number appears twice.
+
+20. **Automatic night mode.** Dark from 6 pm to 6 am by the viewer's clock. The top-bar toggle overrides it for the rest of the day; Settings can fix Light or Dark permanently.
+
+21. **App region moved to Singapore (sin1).** The function ran in Washington while Neon is in Singapore; every query crossed the Pacific. Moving it, merging the top-bar queries and caching index cards for 10 minutes cut page times from 1.3 to 10 s down to about 0.2 to 0.5 s.
+
+22. **Nifty Smallcap 100 via an ETF stand-in.** Yahoo returns no history for `^CNXSC` and NSE's site blocks automated requests, so the Zerodha Nifty Smallcap 100 ETF (scheme 153837, about a year of daily NAVs) is its proxy, labelled in the UI. Small-cap funds are still compared with the Smallcap 250, their official benchmark.
 
 17. **SIP calculator maths** uses monthly rate `(1+r)^(1/12) − 1` with SIPs at the start of each month, so ₹5,000/month for 10 years at 12% ≈ ₹11.2 lakh (the "₹11.6 lakh" example in the brief assumes a flat 1% a month).

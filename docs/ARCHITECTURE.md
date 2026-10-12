@@ -34,7 +34,7 @@ The component map is a swimlane diagram: columns are Trigger → Input → Conte
 2. Index moves (`report.index_moves`), news (`news.gather`: GNews → RSS).
 3. `verdict.decide()` — rules only: lagging streaks, big monthly gaps, allocation drift → one of three verdicts.
 4. `report.build_facts()` → Gemini market summary + report (`report.generate`) → `guardrails.validate_report` (schema, 3 sentences per fund, verdict equals code's, every number matches facts ±0.05, banned phrases) → 1 retry → deterministic fallback template.
-5. Saved: `reports`, `market_context`, `news_items`, `alerts`; Resend email; Today hero, Weekly reports, Trends, Market pulse.
+5. Saved: `reports`, `market_context`, `news_items`, `alerts`; Resend email; the full-screen sky (Clear skies / Passing clouds / Storm watch), the Saturday report strip on Today, Past weeks, Markets and news.
 
 **Flow 4 — Add or remove a fund** (Manage funds page)
 `GET /api/funds/search` / `GET /api/funds/preview/<code>` (mfapi meta + `benchmarks.classify`) → Meera confirms → `POST /api/funds` (`funds.add`: insert, backfill full NAV history, find peers, rebuild 26 weeks of snapshots). `DELETE /api/funds/<id>` is a soft delete; history is kept.
@@ -57,11 +57,11 @@ The component map is a swimlane diagram: columns are Trigger → Input → Conte
 | category_peers, category_stats | peers job, fund add | snapshots, fund page |
 | transactions | Transactions page, seed | portfolio |
 | weekly_snapshots | weekly job, fund add, seed | verdict, Trends, fund page |
-| market_context, news_items | weekly/daily jobs | reports, Market pulse |
+| market_context, news_items | weekly/daily jobs | reports, Markets and news |
 | reports | weekly job | Today, Reports, chat |
 | forecasts, forecast_metrics | ML workflow | Forecasts, fund page, report appendix |
 | alerts, daily_tips, chat_messages | jobs, chat | Today, Alerts, Ask |
-| job_runs | every job | System status, manual rate limits |
+| job_runs | every job | Settings → Behind the scenes, manual rate limits |
 
 ## Dependency split
 

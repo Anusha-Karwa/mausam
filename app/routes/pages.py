@@ -254,4 +254,13 @@ def alerts_page():
 def settings():
     from .api_settings import get_settings
 
-    return render_template("settings.html", settings=get_settings(user_id()), config_status=config.status())
+    uid = user_id()
+    # "Behind the scenes": the job log and where each fund's latest NAV came from (reliability you can see).
+    jobs_rows = db.query("SELECT job, status, started_at, details FROM job_runs WHERE job NOT LIKE 'seed_%%' "
+                         "ORDER BY started_at DESC LIMIT 8")
+    nav_sources = db.query(
+        """SELECT DISTINCT ON (f.id) COALESCE(f.short_name, f.scheme_name) AS name, n.nav_date, COALESCE(n.source, 'mfapi') AS source
+           FROM funds f JOIN nav_history n ON n.scheme_code = f.scheme_code
+           WHERE f.user_id = %s AND f.is_active ORDER BY f.id, n.nav_date DESC""", [uid])
+    return render_template("settings.html", settings=get_settings(uid), config_status=config.status(),
+                           jobs=jobs_rows, nav_sources=nav_sources)

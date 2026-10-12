@@ -276,6 +276,47 @@
       </ul>
     </section>
 
+    {# ---- Behind the scenes: job log + data sources ---- #}
+    {% set JOB_NAMES = {'daily_nav': 'Nightly NAV refresh', 'manual_refresh': 'NAV refresh (by hand)', 'weekly_report': 'Saturday report',
+                        'manual_report': 'Saturday report (by hand)', 'ml_forecast': 'Forecasts (ML)', 'peers': 'Category averages',
+                        'backfill': 'History top-up'} %}
+    <section class="panel" id="s-behind" aria-labelledby="behind-h">
+      <h2 id="behind-h"><i data-lucide="activity" aria-hidden="true"></i>Behind the scenes</h2>
+      <p class="lead">What Mausam did on its own lately. Every job is logged. When a data source fails, a backup takes over and it's noted here.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>Job</th><th>Started by</th><th>Result</th><th class="num">Took</th><th>Backups used</th></tr></thead>
+          <tbody>
+          {% for j in jobs %}
+            {% set d = j.details or {} %}
+            {% set fb = d.fallbacks or [] %}
+            <tr>
+              <td class="small">{{ j.started_at|dt }}</td>
+              <td>{{ JOB_NAMES.get(j.job, j.job) }}</td>
+              <td class="small muted">{{ 'Schedule' if (d.trigger == 'cron' or j.job in ('ml_forecast', 'peers', 'backfill')) else 'By hand' }}</td>
+              <td>{% if j.status == 'success' %}<span class="chip gain">✓ Worked</span>{% elif j.status == 'partial' %}<span class="chip warn">Partly</span>{% elif j.status == 'running' %}<span class="chip">Running</span>{% else %}<span class="chip loss">✕ Failed</span>{% endif %}</td>
+              <td class="num small">{{ d.duration_s ~ ' s' if d.duration_s is not none else '–' }}</td>
+              <td class="small">{% if fb %}{{ fb|join('; ') }}{% else %}<span class="muted">None needed</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">No jobs have run yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3 style="font-size:15px;margin:16px 0 6px">Where each fund's latest NAV came from</h3>
+      <div class="row" style="gap:8px">
+        {% for n in nav_sources %}
+          <span class="chip {{ 'warn' if n.source == 'amfi' else 'teal' }}">{{ n.name }} · {{ n.nav_date|d('short') }} · {{ 'AMFI (backup)' if n.source == 'amfi' else 'mfapi.in' }}</span>
+        {% endfor %}
+      </div>
+      <p class="hint" style="margin-top:10px">Backups: mfapi.in → AMFI NAVAll.txt for NAVs, Yahoo → index-fund stand-in for markets, GNews → RSS for news, Gemini → fixed template for the report.</p>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" type="button" id="refresh-navs"><i data-lucide="refresh-cw" aria-hidden="true"></i>Refresh NAVs now</button>
+        <span class="small muted" id="refresh-msg"></span>
+      </div>
+    </section>
+
     <div class="save-bar">
       <span class="status" id="save-status" aria-live="polite">All changes saved.</span>
       <button class="btn" type="button" id="undo-btn" hidden>Undo changes</button>
@@ -452,6 +493,19 @@
       } catch (e) { M.toast(e.message, 'error'); }
     });
   });
+
+  // ---------- behind the scenes: manual NAV refresh (rate-limited on the server) ----------
+  const rb = document.getElementById('refresh-navs');
+  if (rb) rb.addEventListener('click', () => M.busy(rb, async () => {
+    const msg = document.getElementById('refresh-msg');
+    msg.textContent = 'Fetching the latest NAVs… about 20 seconds.';
+    try {
+      const d = await M.api('POST', '/api/refresh');
+      const n = (d.navs && d.navs.by_source) || {};
+      msg.textContent = `Done: ${n.mfapi || 0} from mfapi.in, ${n.amfi || 0} from AMFI.`;
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) { msg.textContent = e.message; }
+  }));
 
   // ---------- theme ----------
   const root = document.documentElement;

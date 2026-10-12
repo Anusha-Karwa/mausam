@@ -18,14 +18,17 @@ Meera is 28 and has five monthly SIPs: a large-cap index fund, a mid-cap fund, a
 - Stores **weekly snapshots** forever for multi-week trends.
 - Add or remove funds by **scheme code** from a web form — no code changes.
 - **Hybrid ARIMA + Ridge Regression** forecasts give a likely NAV *range* for 7 and 30 days, with honest accuracy against a "stays the same" guess.
-- 17 pages: Today, Portfolio, Fund detail, Compare, Weekly reports, Trends, Market pulse, Forecasts, Transactions, Manage funds, Calculators, Ask Mausam, Learn, Alerts, Settings, System status, About.
+- Pages in plain words, grouped in the sidebar: **This week** (Today, Markets and news; the Saturday report opens from Today), **My money** (My portfolio, Manage funds, SIPs and payments), **Look ahead** (Past weeks, Next month, Compare funds, Calculators). Alerts and Settings sit in the top bar; every fund has its own detail page.
+- **Weather UI:** the whole screen shows this week's verdict as a live sky: sun for Clear skies, drifting clouds for Passing clouds, dark clouds with full-screen rain and lightning for Storm watch. Moon and stars at night; **night mode turns on automatically from 6 pm to 6 am**.
+- **Today** shows only this week (₹ change, funds that kept up with their market, why they moved, next SIP); **My portfolio** shows all-time totals.
+- **Ask Mausam** is a floating chat bubble on every page: a sun by day, a moon by night.
 
 ## Architecture
 
 | Part | Choice |
 |---|---|
 | Web | Flask + Jinja2 templates, hand-written CSS, vanilla JS, Chart.js, Lucide |
-| Hosting | Vercel (one Python function, `index.py`) + Vercel Cron |
+| Hosting | Vercel (one Python function, `index.py`, Singapore region next to the database) + Vercel Cron |
 | Database | Neon serverless PostgreSQL (pooled connection) |
 | AI | Gemini Flash only (`GEMINI_MODEL`, default `gemini-3.8-flash`) |
 | ML | Python in GitHub Actions (pandas, statsmodels, scikit-learn) |
@@ -104,7 +107,7 @@ flask --app index run
 - **Daily (18:00 UTC ≈ 23:30 IST):** NAVs (mfapi → AMFI fallback), 5-day index closes, stale/big-move alerts, daily tip, a news refresh.
 - **Saturday (02:00 UTC ≈ 07:30 IST):** re-fetch NAVs, snapshots, verdict, Gemini report with guardrails, email.
 - **Friday night (GitHub Actions):** NAV/index backfill, category averages, forecasts and backtests.
-- Hobby-plan crons run once a day and may fire anywhere within the scheduled hour. Every run is logged in `job_runs` and visible on **System status**. "Refresh NAVs now" and "Generate this week's report now" buttons run the same code on demand (rate-limited to once per 10 minutes).
+- Hobby-plan crons run once a day and may fire anywhere within the scheduled hour. Every run is logged in `job_runs` and shown under **Settings → Behind the scenes**, including which backup source was used. "Refresh NAVs now" and "Generate this week's report now" buttons run the same code on demand (rate-limited to once per 10 minutes).
 
 ## Data sources and limits
 

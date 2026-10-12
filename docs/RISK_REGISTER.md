@@ -10,13 +10,13 @@
 | News API quota/failure | No market context | RSS fallback; report says "no major news found" rather than guessing | `services/news.gather` |
 | Wrong benchmark for a fund | Misleading comparison | Category mapping + visible "how we chose this" + manual override | `services/benchmarks.py`, Manage funds |
 | Category average not official | Imprecise comparison | Computed from N named peers, disclosed with peer count | `services/category.py` |
-| Price index vs NAV (dividends) | Small systematic gap | Disclosed in tooltip and About page | Fund detail, About |
-| Cron timing drift / missed run | Late report | Job logging, status page, manual "Generate now" button, idempotent jobs | `jobs.job_run`, `/status` |
+| Price index vs NAV (dividends) | Small systematic gap | Disclosed in tooltip and README | Fund detail, README |
+| Cron timing drift / missed run | Late report | Job logging, Settings → Behind the scenes, manual "Generate now" and "Refresh NAVs now" buttons, idempotent jobs | `jobs.job_run`, `/settings` |
 | Gemini free-tier rate limits | Report fails | Single batched call, retry with backoff, deterministic fallback | `services/gemini.py`, `report.generate` |
-| Free-tier data use by Google | Privacy | No names/emails sent; disclosed on About page | `assistant.chat_context`, About |
+| Free-tier data use by Google | Privacy | No names/emails sent; disclosed in README | `assistant.chat_context` |
 | Neon cold start | Slow first load | Pooled connection, short queries, skeleton loaders | `app/db.py` |
 | Secrets leak | Account abuse | Env vars only, `.env` in `.gitignore`, CRON_SECRET on job and admin routes | `config.py`, `routes/cron.py`, `routes/admin.py` |
 | Over-trading from weekly checks | Emotional decisions | Calm copy, long-term charts beside weekly numbers, "No action needed" is the default | UI copy, `verdict.decide` |
 | **Public demo has no login** | Anyone with the URL can edit the demo data | Single-user demo by design; CSRF on writes; rate limits on Gemini and refresh; data is fictional demo data | `app/__init__.py` |
-| **Smallcap 100 has no free history** | Can't benchmark small caps against it | Use Nifty Smallcap 250 (official benchmark of most small-cap funds), explained in tooltip | `benchmarks.classify` |
+| **Smallcap 100 has no free index history** | Weekly move missing | Zerodha Nifty Smallcap 100 ETF as stand-in; small-cap funds still compared with the Smallcap 250 (their official benchmark) | `db/seed.sql`, `benchmarks.classify` |
 | **AMFI certificate chain** (Sectigo R46) | Fallback download fails on old CA bundles | `certifi>=2025.1.31` pinned | `requirements.txt` |
