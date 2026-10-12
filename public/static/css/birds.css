@@ -1,0 +1,55 @@
+/* Birds towing a banner of the latest update across the top of the screen. */
+
+.flight-lane {
+  position: relative; height: 58px; margin: 0; overflow: hidden; pointer-events: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+}
+.flight {
+  position: absolute; top: 9px; left: 0; display: flex; align-items: center; white-space: nowrap;
+  animation: tow-fly 24s linear infinite, tow-bob 3.2s ease-in-out infinite;
+  will-change: transform;
+}
+/* Fly from just off the left edge to just off the right edge of the lane. */
+@keyframes tow-fly { from { left: 0; transform: translateX(-100%); } to { left: 100%; transform: translateX(0); } }
+@keyframes tow-bob { 0%, 100% { margin-top: 0; } 50% { margin-top: 6px; } }
+.flight-lane:hover .flight { animation-play-state: paused; }
+
+.tow-banner {
+  position: relative; display: inline-flex; align-items: center; height: 36px; padding: 0 14px 0 16px;
+  background: #FFF6E0; color: #3B2A10; font: 600 13.5px var(--font-body); text-decoration: none;
+  border-radius: 4px 0 0 4px; box-shadow: 0 6px 16px rgba(20, 30, 50, .18); pointer-events: auto;
+  transform-origin: right center; animation: tow-wave 2.4s ease-in-out infinite;
+}
+.tow-banner:hover { background: #FFFFFF; }
+.tow-banner:focus-visible { outline: 3px solid var(--monsoon); outline-offset: 2px; }
+.tow-tail { position: absolute; left: -22px; top: 0; width: 22px; height: 36px; fill: #F1E3C0; }
+@keyframes tow-wave { 0%, 100% { transform: skewY(0deg); } 50% { transform: skewY(-1.6deg); } }
+
+.tow-ropes { width: 60px; height: 36px; flex: none; fill: none; stroke: #5B6676; stroke-width: 1.2; }
+.flock { position: relative; width: 70px; height: 40px; flex: none; }
+.bird { position: absolute; fill: none; stroke: #263445; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.bird .wing { transform-origin: 50% 50%; transform-box: fill-box; animation: flap .55s ease-in-out infinite; }
+.b1 { width: 30px; height: 15px; left: 34px; top: 4px; }
+.b2 { width: 24px; height: 12px; left: 8px; top: 0; }
+.b2 .wing { animation-delay: -.2s; }
+.b3 { width: 22px; height: 11px; left: 14px; top: 24px; }
+.b3 .wing { animation-delay: -.38s; }
+@keyframes flap { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(-.45); } }
+
+html[data-mode="night"] .bird { stroke: #DCE4F2; }
+html[data-mode="night"] .tow-ropes { stroke: #9AA8BB; }
+html[data-mode="night"] .tow-banner { background: #F3E9C6; color: #2A2108; }
+html[data-mode="night"] .tow-tail { fill: #E2D6AC; }
+/* in a storm the flock fights the wind: a little faster and bumpier */
+body.sky-storm .flight { animation-duration: 18s, 1.6s; }
+
+@media (max-width: 860px) {
+  .flight-lane { height: 50px; }
+  .tow-banner { height: 30px; font-size: 12.5px; max-width: 72vw; overflow: hidden; text-overflow: ellipsis; }
+  .tow-text { overflow: hidden; text-overflow: ellipsis; }
+  .tow-tail { height: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flight { left: 16px; transform: none; animation: none; }
+}
+@media print { .flight-lane { display: none; } }
