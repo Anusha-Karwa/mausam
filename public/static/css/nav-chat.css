@@ -9,18 +9,53 @@
 .shell.collapsed .nav-heading { visibility: hidden; height: 6px; padding: 0; }
 .icon-btn[aria-current="page"] { border-color: var(--monsoon); color: var(--monsoon); }
 
-/* ---- chat bubble ---- */
+/* ---- chat bubble: a sun by day, a moon by night ---- */
 .chatw { position: fixed; right: 22px; bottom: 22px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
-.chatw-bubble {
-  display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 20px 0 16px; border-radius: 28px; border: 0;
-  background: var(--monsoon); color: var(--monsoon-ink); font: 600 15px var(--font-body); cursor: pointer;
-  box-shadow: 0 6px 20px rgba(14, 124, 123, .35), 0 0 0 6px color-mix(in srgb, var(--monsoon) 18%, transparent);
-  transition: transform .15s ease;
+.chatw-bubble { display: inline-flex; align-items: center; gap: 10px; border: 0; padding: 0; background: none; cursor: pointer; font: 600 14px var(--font-body); color: var(--ink); }
+.chatw-bubble-label {
+  padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); box-shadow: var(--shadow);
+  transition: opacity .2s, transform .2s;
 }
-.chatw-bubble:hover { transform: translateY(-2px); }
-.chatw-bubble svg { width: 22px; height: 22px; }
-.chatw-bubble.is-open { padding: 0 16px; }
-.chatw-bubble.is-open .chatw-bubble-label { display: none; }
+.chatw-bubble:hover .chatw-bubble-label { transform: translateX(-3px); }
+.chatw-orb { --orb-size: 66px; position: relative; width: var(--orb-size); height: var(--orb-size); flex: none; display: block; }
+.orb-rays {
+  position: absolute; inset: -14px; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, #FFC94D 0deg 7deg, transparent 7deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 55%, #000 68%, transparent 69%);
+          mask: radial-gradient(circle, transparent 54%, #000 55%, #000 68%, transparent 69%);
+  animation: orb-spin 24s linear infinite; opacity: .95;
+}
+.orb-disc {
+  --orb-dot: #F59E1B;
+  position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; overflow: hidden; color: #7A3E00;
+  background: radial-gradient(circle at 36% 32%, #FFF3B0, #FFC23D 55%, #F59E1B);
+  box-shadow: 0 0 0 5px rgba(255, 200, 80, .28), 0 8px 26px rgba(245, 158, 27, .55);
+  transition: transform .2s ease;
+}
+.chatw-bubble:hover .orb-disc { transform: scale(1.06); }
+.orb-icon { width: 30px; height: 30px; position: relative; z-index: 1; }
+.crater { position: absolute; border-radius: 50%; background: #CFC8AB; opacity: 0; }
+.c1 { width: 12px; height: 12px; left: 12px; top: 14px; } .c2 { width: 16px; height: 16px; right: 10px; bottom: 10px; } .c3 { width: 7px; height: 7px; right: 16px; top: 12px; }
+.orb-close { position: absolute; inset: 0; display: none; place-items: center; color: inherit; }
+.orb-close svg { width: 24px; height: 24px; }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+
+/* night: the sun becomes a glowing moon */
+html[data-mode="night"] .orb-rays { display: none; }
+html[data-mode="night"] .orb-disc {
+  --orb-dot: #E8E2C8; color: #1B2A4E;
+  background: radial-gradient(circle at 36% 32%, #FFFBEA, #ECE6CC 62%, #CFC7A6);
+  box-shadow: 0 0 0 6px rgba(220, 228, 255, .14), 0 0 34px 8px rgba(225, 232, 255, .38);
+}
+html[data-mode="night"] .crater { opacity: .7; }
+
+/* open state: the orb shows a close cross, the label hides */
+.chatw-bubble.is-open .chatw-bubble-label { opacity: 0; pointer-events: none; }
+.chatw-bubble.is-open .orb-icon, .chatw-bubble.is-open .crater { display: none; }
+.chatw-bubble.is-open .orb-close { display: grid; }
+.chatw-bubble:focus-visible { outline: none; }
+.chatw-bubble:focus-visible .orb-disc { outline: 3px solid var(--monsoon); outline-offset: 4px; }
 
 .chatw-panel {
   width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 140px));
@@ -49,7 +84,7 @@
 
 @media (max-width: 860px) {
   .chatw { right: 14px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
-  .chatw-bubble { height: 50px; padding: 0 14px; }
+  .chatw-orb { --orb-size: 56px; }
   .chatw-bubble-label { display: none; }
   .chatw-panel { height: min(520px, calc(100vh - 190px)); }
 }

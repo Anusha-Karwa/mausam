@@ -14,20 +14,20 @@ from .services.verdict import weather
 # Sidebar menu: plain-word page names in three groups. 'match' = extra URL prefixes that light the item up.
 NAV_GROUPS = [
     ("This week", [
-        {"href": "/", "label": "Today", "icon": "sun", "mobile": True},
-        {"href": "/reports", "label": "Saturday report", "icon": "newspaper", "mobile": True},
+        # The Saturday report opens from Today, so Today stays lit on /reports pages.
+        {"href": "/", "label": "Today", "icon": "sun", "mobile": True, "match": ["/reports"]},
         {"href": "/market", "label": "Markets and news", "icon": "globe"},
     ]),
     ("My money", [
-        {"href": "/portfolio", "label": "My money", "icon": "wallet", "mobile": True},
+        {"href": "/portfolio", "label": "My portfolio", "icon": "wallet", "mobile": True},
         {"href": "/manage", "label": "My funds", "icon": "layers", "mobile": True, "match": ["/funds"]},
-        {"href": "/transactions", "label": "SIPs and payments", "icon": "receipt"},
+        {"href": "/transactions", "label": "SIPs and payments", "icon": "receipt", "mobile": True},
     ]),
     ("Look ahead", [
         {"href": "/trends", "label": "Past weeks", "icon": "history"},
         {"href": "/forecasts", "label": "Next month", "icon": "telescope"},
         {"href": "/compare", "label": "Compare funds", "icon": "git-compare"},
-        {"href": "/calculators", "label": "Plan ahead", "icon": "calculator"},
+        {"href": "/calculators", "label": "Calculators", "icon": "calculator"},
     ]),
 ]
 NAV = [item for _, items in NAV_GROUPS for item in items]
@@ -39,9 +39,10 @@ CORNER_LINKS = [
 
 
 def nav_active(item: dict, path: str) -> bool:
+    extra = item.get("match", [])
     if item["href"] == "/":
-        return path == "/"
-    return any(path.startswith(p) for p in [item["href"], *item.get("match", [])])
+        return path == "/" or any(path.startswith(p) for p in extra)
+    return any(path.startswith(p) for p in [item["href"], *extra])
 
 
 

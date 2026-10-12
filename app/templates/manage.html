@@ -90,15 +90,8 @@
           </select>
           <p class="hint">Leave on automatic unless you know better.</p>
         </div>
-        <div class="field">
-          <label for="a-sip">{{ term('sip', 'SIP') }} amount (₹) <span class="muted" style="font-weight:400">(optional)</span></label>
-          <input type="number" id="a-sip" min="0" step="100" inputmode="decimal" placeholder="e.g. 5000">
-        </div>
-        <div class="field">
-          <label for="a-day">SIP day of month <span class="muted" style="font-weight:400">(1 to 28)</span></label>
-          <input type="number" id="a-day" min="1" max="28" step="1" inputmode="numeric" placeholder="e.g. 5">
-        </div>
       </div>
+      <p class="hint" style="margin:-4px 0 12px">Set this fund's monthly SIP afterwards on <a href="/transactions#sip-plan">SIPs and payments</a>.</p>
       <div class="row">
         <button class="btn btn-primary" type="submit" id="a-add" disabled><i data-lucide="plus" aria-hidden="true"></i>Add fund</button>
         <span class="small muted" id="a-add-hint">Look up a fund first.</span>
@@ -137,7 +130,7 @@
       </div>
       <p class="small muted" style="margin:-4px 0 10px 120px">{{ counts[k] }} fund{{ '' if counts[k] == 1 else 's' }} in your list</p>
       {% endfor %}
-      <p class="small" style="margin:6px 0 0"><a href="/portfolio">See your real mix on the Portfolio page</a></p>
+      <p class="small" style="margin:6px 0 0"><a href="/portfolio">See your real mix on My portfolio</a></p>
     </section>
   </div>
 </div>
@@ -166,7 +159,7 @@
         <div><span class="k">Type</span>{{ f.asset_class|asset }}{% if f.scheme_category %} · <span class="muted">{{ f.scheme_category }}</span>{% endif %}</div>
         <div><span class="k">Compared with</span>{{ f.benchmark_key|bench }}{% if f.benchmark_is_override %} <span class="chip" style="font-size:11px;padding:1px 7px">your choice</span>{% endif %}</div>
         <div><span class="k">{{ term('category average', 'Category average') }}</span>{% if f.peer_count %}Category average from {{ f.peer_count }} similar fund{{ '' if f.peer_count == 1 else 's' }}{% else %}<span class="muted">No similar funds found yet</span>{% endif %}{% if f.peer_group %}<span class="small muted"> ({{ f.peer_group }})</span>{% endif %}</div>
-        <div><span class="k">{{ term('sip', 'SIP') }}</span>{% if f.sip_amount and f.sip_day %}{{ f.sip_amount|inr }} on day {{ f.sip_day }} of each month{% else %}<span class="muted">No SIP set</span>{% endif %}</div>
+        <div><span class="k">{{ term('sip', 'SIP') }}</span>{% if f.sip_amount and f.sip_day %}{{ f.sip_amount|inr }} on day {{ f.sip_day }} of each month{% else %}<span class="muted">No SIP set</span>{% endif %} · <a class="small" href="/transactions#sip-plan">Change on SIPs and payments</a></div>
       </div>
       <form class="edit" id="edit-{{ f.id }}" hidden novalidate>
         <div class="form-grid">
@@ -175,21 +168,13 @@
             <input type="text" id="e-name-{{ f.id }}" name="short_name" maxlength="60" value="{{ name }}">
           </div>
           <div class="field">
-            <label for="e-bench-{{ f.id }}">Benchmark</label>
+            <label for="e-bench-{{ f.id }}">Compared with</label>
             <select id="e-bench-{{ f.id }}" name="benchmark_key">
               {% for k in benchmark_choices %}<option value="{{ k }}" {% if k == f.benchmark_key %}selected{% endif %}>{{ BENCHMARK_LABELS.get(k, k) }}</option>{% endfor %}
             </select>
           </div>
-          <div class="field">
-            <label for="e-sip-{{ f.id }}">SIP amount (₹)</label>
-            <input type="number" id="e-sip-{{ f.id }}" name="sip_amount" min="0" step="100" value="{{ '%.0f'|format(f.sip_amount) if f.sip_amount is not none else '' }}" placeholder="none">
-          </div>
-          <div class="field">
-            <label for="e-day-{{ f.id }}">SIP day (1 to 28)</label>
-            <input type="number" id="e-day-{{ f.id }}" name="sip_day" min="1" max="28" step="1" value="{{ f.sip_day if f.sip_day is not none else '' }}" placeholder="none">
-          </div>
         </div>
-        <p class="hint" style="margin-top:-4px">Changing the benchmark rebuilds 26 weeks of comparisons, which can take a little while. Clear both SIP boxes to remove the SIP.</p>
+        <p class="hint" style="margin-top:-4px">Changing what it is compared with rebuilds 26 weeks of comparisons, which can take a little while.</p>
         <div class="row" style="margin-top:8px">
           <button class="btn btn-primary btn-sm" type="submit">Save changes</button>
           <button class="btn btn-sm btn-ghost" type="button" data-act="cancel">Cancel</button>
@@ -354,10 +339,7 @@
   $('add-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (!current || current.duplicate || String(current.scheme_code) !== code.value.trim()) { loadPreview(); return; }
-    const day = $('a-day').value, sip = $('a-sip').value;
-    if (day !== '' && (Number(day) < 1 || Number(day) > 28)) { Mausam.toast('SIP day must be between 1 and 28.', 'error'); return; }
-    const body = { scheme_code: Number(code.value), short_name: nameEl.value.trim() || null,
-      sip_amount: sip === '' ? null : Number(sip), sip_day: day === '' ? null : Number(day), benchmark_key: benchEl.value || null };
+    const body = { scheme_code: Number(code.value), short_name: nameEl.value.trim() || null, benchmark_key: benchEl.value || null };
     const prog = $('a-progress'), el = $('a-elapsed');
     prog.hidden = false; Mausam.icons();
     const start = Date.now();
@@ -394,10 +376,6 @@
       if (!nm) { Mausam.toast('Give the fund a short friendly name.', 'error'); return; }
       if (nm !== card.dataset.name) changes.short_name = nm;
       if (form.elements.benchmark_key.value !== card.dataset.bench) changes.benchmark_key = form.elements.benchmark_key.value;
-      const sip = form.elements.sip_amount.value, day = form.elements.sip_day.value;
-      if (String(sip === '' ? '' : Number(sip)) !== String(card.dataset.sip === '' ? '' : Number(card.dataset.sip))) changes.sip_amount = sip === '' ? null : Number(sip);
-      if (String(day) !== String(card.dataset.day)) changes.sip_day = day === '' ? null : Number(day);
-      if (day !== '' && (Number(day) < 1 || Number(day) > 28)) { Mausam.toast('SIP day must be between 1 and 28.', 'error'); return; }
       if (!Object.keys(changes).length) { toggle(false); Mausam.toast('Nothing changed.'); return; }
       const btn = form.querySelector('button[type="submit"]');
       if ('benchmark_key' in changes) Mausam.toast('Saving and rebuilding comparisons against the new benchmark… this can take up to a minute.');

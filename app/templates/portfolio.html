@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% import "partials/macros.html" as m %}
-{% block title %}My money{% endblock %}
+{% block title %}My portfolio{% endblock %}
 
 {% block head %}
 <style>
@@ -28,7 +28,7 @@
 <div class="stack">
   <div class="page-head">
     <div>
-      <h1>My money</h1>
+      <h1>My portfolio</h1>
       <p>What you've put in, what it's worth now, and how it's spread across your funds.</p>
     </div>
     {% if summary.funds %}<a class="btn" href="/transactions"><i data-lucide="receipt" aria-hidden="true"></i>Record a transaction</a>{% endif %}

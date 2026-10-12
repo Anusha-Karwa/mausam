@@ -26,8 +26,15 @@
     <p class="chatw-note">Explains, never tells you what to buy or sell. Answers by Gemini Flash using only your app's numbers, checked by code. Not investment advice.</p>
   </section>
   <button type="button" class="chatw-bubble" id="chatw-bubble" aria-expanded="false" aria-controls="chatw-panel" aria-label="Ask Mausam a question">
-    <i data-lucide="message-circle" aria-hidden="true"></i>
-    <span class="chatw-bubble-label">Ask</span>
+    <span class="chatw-bubble-label">Ask Mausam</span>
+    {# A sun by day, a moon by night (html[data-mode]); the little tail makes it read as a chat bubble. #}
+    <span class="chatw-orb" aria-hidden="true">
+      <span class="orb-rays"></span>
+      <span class="orb-disc"><span class="crater c1"></span><span class="crater c2"></span><span class="crater c3"></span>
+        <svg class="orb-icon" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.6c-.5.4-1.3.1-1.3-.6V16A2.5 2.5 0 0 1 4 13.5z" fill="currentColor"/><circle cx="8.5" cy="9.5" r="1.2" fill="var(--orb-dot)"/><circle cx="12" cy="9.5" r="1.2" fill="var(--orb-dot)"/><circle cx="15.5" cy="9.5" r="1.2" fill="var(--orb-dot)"/></svg>
+      </span>
+      <span class="orb-close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+    </span>
   </button>
 </div>
 <script>

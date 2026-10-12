@@ -22,7 +22,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=5">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=2">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=2">
   {% block head %}{% endblock %}
 </head>
 <body class="sky-{{ (sky or {}).key or 'clear' }}">
@@ -81,7 +81,7 @@
 <nav class="tabbar" aria-label="Main (mobile)">
   {% for item in NAV if item.mobile %}
     <a href="{{ item.href }}" {% if nav_active(item, current_path) %}aria-current="page"{% endif %}>
-      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'Saturday report': 'Report'}.get(item.label, item.label) }}
+      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'My portfolio': 'Portfolio', 'SIPs and payments': 'SIPs'}.get(item.label, item.label) }}
     </a>
   {% endfor %}
   <button type="button" id="more-btn" aria-haspopup="dialog" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i>More</button>

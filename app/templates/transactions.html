@@ -38,6 +38,12 @@
     .calendar .sip, .calendar button.sip { font-size: 0 !important; height: 7px; padding: 0 !important; }
     #h-table td.note { max-width: 120px; }
   }
+  .plan-list { display: grid; gap: 8px; }
+  .plan-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); }
+  .plan-name { display: flex; gap: 8px; align-items: center; font-weight: 600; align-self: center; min-width: 0; }
+  .plan-field { margin: 0; font-weight: 500; font-size: 12px; color: var(--slate); display: grid; gap: 4px; }
+  .plan-field input { height: 36px; }
+  @media (max-width: 640px) { .plan-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .plan-name { grid-column: 1 / -1; } }
 </style>
 {% endblock %}
 
@@ -49,7 +55,7 @@
 <div class="page-head">
   <div>
     <h1>SIPs and payments</h1>
-    <p>Log every {{ term('sip', 'SIP') }}, buy and sell so Mausam can work out what you own and how it's doing.</p>
+    <p>Your monthly {{ term('sip', 'SIP') }} plan, and a record of every payment in or out. To add or remove a fund, go to <a href="/manage">My funds</a>.</p>
   </div>
   <a class="btn no-print" href="/api/transactions/export.csv" download><i data-lucide="download" aria-hidden="true"></i>Export CSV</a>
 </div>
@@ -60,13 +66,29 @@
 </div>
 
 {% if not funds %}
-<div class="panel">{{ m.empty('list-plus', 'Add a fund first', 'Transactions belong to a fund. Add your funds on the Manage funds page, then come back to log what you invested.', '/manage', 'Add a fund') }}</div>
+<div class="panel">{{ m.empty('list-plus', 'Add a fund first', 'Payments belong to a fund. Add your funds on My funds first, then come back here.', '/manage', 'Go to My funds') }}</div>
 {% else %}
 <div class="stack">
+  {# ---------- Monthly SIP plan (the only place SIP amounts and dates are set) ---------- #}
+  <section class="panel" aria-labelledby="plan-h" id="sip-plan">
+    <div class="panel-head"><h2 id="plan-h">Your monthly SIP plan</h2><span class="small muted" id="plan-total"></span></div>
+    <p class="small muted" style="margin-top:-6px">How much goes into each fund every month, and on which day. Leave the amount empty if a fund has no SIP.</p>
+    <div class="plan-list">
+      {% for f in funds %}
+      <form class="plan-row" data-id="{{ f.id }}" data-sip="{{ '%.0f'|format(f.sip_amount) if f.sip_amount else '' }}" data-day="{{ f.sip_day or '' }}" novalidate>
+        <span class="plan-name"><span class="swatch" style="background:{{ f.colour or 'var(--monsoon)' }}" aria-hidden="true"></span>{{ f.short_name or f.scheme_name }}</span>
+        <label class="plan-field"><span>Amount (₹)</span><input type="number" name="sip_amount" id="plan-amt-{{ f.id }}" min="0" step="100" inputmode="numeric" value="{{ '%.0f'|format(f.sip_amount) if f.sip_amount else '' }}" placeholder="No SIP"></label>
+        <label class="plan-field"><span>Day of month</span><input type="number" name="sip_day" id="plan-day-{{ f.id }}" min="1" max="28" step="1" inputmode="numeric" value="{{ f.sip_day or '' }}" placeholder="1 to 28"></label>
+        <button class="btn btn-sm" type="submit">Save</button>
+      </form>
+      {% endfor %}
+    </div>
+  </section>
+
   <div class="grid">
     {# ---------- Add transaction ---------- #}
     <section class="panel span-7" aria-labelledby="add-h" id="add">
-      <div class="panel-head"><h2 id="add-h">Log a transaction</h2></div>
+      <div class="panel-head"><h2 id="add-h">Record a payment</h2></div>
       <form id="add-form" novalidate autocomplete="off">
         <div class="form-grid">
           <div class="field">
@@ -211,7 +233,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="small muted">No SIPs set. Add a SIP amount and day on the <a href="/manage">Manage funds</a> page.</p>
+        <p class="small muted">No SIPs set yet. Add amounts in <a href="#sip-plan">Your monthly SIP plan</a> above.</p>
         {% endif %}
       </div>
     </div>
@@ -258,6 +280,37 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+// Monthly SIP plan: the one place SIP amount and day are set (PATCH /api/funds/<id>).
+(function () {
+  const total = document.getElementById('plan-total');
+  function sum() {
+    let t = 0;
+    document.querySelectorAll('.plan-row input[name="sip_amount"]').forEach((i) => { t += Number(i.value) || 0; });
+    if (total) total.textContent = t ? 'Total ' + Mausam.inr(t) + ' a month' : '';
+  }
+  document.querySelectorAll('.plan-row').forEach((row) => {
+    row.addEventListener('input', sum);
+    row.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const amt = row.elements.sip_amount.value.trim(), day = row.elements.sip_day.value.trim();
+      if (amt !== '' && Number(amt) < 0) { Mausam.toast('The SIP amount cannot be negative.', 'error'); return; }
+      if (amt !== '' && day === '') { Mausam.toast('Pick the day of the month the SIP goes out (1 to 28).', 'error'); row.elements.sip_day.focus(); return; }
+      if (day !== '' && (Number(day) < 1 || Number(day) > 28)) { Mausam.toast('The SIP day must be between 1 and 28.', 'error'); return; }
+      const body = { sip_amount: amt === '' ? null : Number(amt), sip_day: amt === '' ? null : Number(day) };
+      const btn = row.querySelector('button');
+      Mausam.busy(btn, async () => {
+        try {
+          await Mausam.api('PATCH', '/api/funds/' + row.dataset.id, body);
+          Mausam.toast(amt === '' ? 'SIP removed.' : 'SIP saved.');
+          setTimeout(() => location.reload(), 700);
+        } catch (err) { Mausam.toast(err.message, 'error'); }
+      });
+    });
+  });
+  sum();
+})();
+</script>
 <script>
 (function () {
   const D = Mausam.data('txn-data') || {};
