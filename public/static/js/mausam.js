@@ -240,6 +240,25 @@
       shell.classList.toggle('collapsed');
       try { localStorage.setItem('mausam-sidebar', shell.classList.contains('collapsed') ? 'collapsed' : 'open'); } catch (e) {}
     });
+    // Phone: three-line button opens the menu panel; picking a page (or tapping outside) closes it.
+    const menuBtn = $('#menu-btn'), backdrop = $('#nav-backdrop');
+    const setMenu = (open) => {
+      document.body.classList.toggle('nav-open', open);
+      if (backdrop) backdrop.hidden = !open;
+      if (menuBtn) {
+        menuBtn.setAttribute('aria-expanded', String(open));
+        menuBtn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        menuBtn.innerHTML = `<i data-lucide="${open ? 'x' : 'menu'}" aria-hidden="true"></i>`;
+        icons();
+      }
+      if (open) { const cur = $('#sidebar [aria-current="page"]') || $('#sidebar a'); if (cur) cur.focus(); }
+    };
+    if (menuBtn) menuBtn.addEventListener('click', () => setMenu(!document.body.classList.contains('nav-open')));
+    if (backdrop) backdrop.addEventListener('click', () => setMenu(false));
+    $$('#sidebar a').forEach((l) => l.addEventListener('click', () => setMenu(false)));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('nav-open')) { setMenu(false); if (menuBtn) menuBtn.focus(); }
+    });
     const more = $('#more-btn'), sheet = $('#more-sheet');
     if (more && sheet) {
       more.addEventListener('click', () => { sheet.hidden = false; more.setAttribute('aria-expanded', 'true'); });

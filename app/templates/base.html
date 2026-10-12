@@ -47,14 +47,14 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=6">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=2">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=6">
   {% block head %}{% endblock %}
 </head>
 <body class="sky-{{ (sky or {}).key or 'clear' }}">
 {% include "partials/sky_scene.html" %}
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="shell" id="shell">
-  <nav class="sidebar" aria-label="Main">
+  <nav class="sidebar" id="sidebar" aria-label="Main">
     <a class="brand" href="/">
       {% include "partials/logo.html" %}
       <span class="brand-text"><span class="brand-name">Mausam</span><span class="brand-sub">your money weather</span></span>
@@ -78,6 +78,7 @@
 
   <div class="main">
     <header class="topbar">
+      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar"><i data-lucide="menu" aria-hidden="true"></i></button>
       <span class="page-title">{% block page_title %}{{ self.title() }}{% endblock %}</span>
       <span class="freshness" title="NAVs are published once a day after markets close. They are not live prices.">
         <span class="dot {% if fresh %}fresh{% elif fresh is not none %}stale{% endif %}" aria-hidden="true"></span>
@@ -105,25 +106,7 @@
   </div>
 </div>
 
-<nav class="tabbar" aria-label="Main (mobile)">
-  {% for item in NAV if item.mobile %}
-    <a href="{{ item.href }}" {% if nav_active(item, current_path) %}aria-current="page"{% endif %}>
-      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'My portfolio': 'Portfolio', 'Manage funds': 'Funds', 'SIPs and payments': 'SIPs'}.get(item.label, item.label) }}
-    </a>
-  {% endfor %}
-  <button type="button" id="more-btn" aria-haspopup="dialog" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i>More</button>
-</nav>
-<div id="more-sheet" hidden>
-  <div class="sheet-backdrop" data-close></div>
-  <div class="sheet" role="dialog" aria-label="More pages">
-    {% for item in NAV if not item.mobile %}
-      <a href="{{ item.href }}"><i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label }}</a>
-    {% endfor %}
-    {% for item in CORNER_LINKS %}
-      <a href="{{ item.href }}"><i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label }}</a>
-    {% endfor %}
-  </div>
-</div>
+<div class="nav-backdrop" id="nav-backdrop" hidden></div>
 
 <div class="toast-host" id="toasts" role="status" aria-live="polite"></div>
 <dialog id="confirm-dialog">
@@ -138,7 +121,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
-<script src="{{ url_for('static', filename='js/mausam.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/mausam.js') }}?v=6"></script>
 {% if not current_path.startswith('/ask') %}{% include "partials/chat_widget.html" %}{% endif %}
 {% block scripts %}{% endblock %}
 </body>
