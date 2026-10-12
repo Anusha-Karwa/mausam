@@ -21,9 +21,11 @@
 {%- endmacro %}
 
 {% macro gap_chip(gap, ref_label='benchmark') -%}
-{% if gap is none %}<span class="chip">No {{ ref_label }} figure</span>
-{% elif gap >= 0 %}<span class="chip gain">▲ Beat {{ ref_label }} by {{ '%.2f'|format(gap) }} pts</span>
-{% else %}<span class="chip loss">▼ Behind {{ ref_label }} by {{ '%.2f'|format(-gap) }} pts</span>{% endif %}
+{% set who = 'its market' if ref_label == 'benchmark' else 'similar funds' %}
+{% set tip = 'Compared with ' ~ ('the market index it is measured against' if ref_label == 'benchmark' else 'the average of similar funds') ~ ' this week, in percentage points.' %}
+{% if gap is none %}<span class="chip">No comparison yet</span>
+{% elif gap >= 0 %}<span class="chip gain" data-tip="{{ tip }}">▲ {{ '%.2f'|format(gap) }}% ahead of {{ who }}</span>
+{% else %}<span class="chip loss" data-tip="{{ tip }}">▼ {{ '%.2f'|format(-gap) }}% behind {{ who }}</span>{% endif %}
 {%- endmacro %}
 
 {% macro attribution_chip(code) -%}

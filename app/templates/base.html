@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Figtree:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=5">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=2">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=1">
   {% block head %}{% endblock %}
 </head>
 <body class="sky-{{ (sky or {}).key or 'clear' }}">
@@ -33,11 +34,15 @@
       {% include "partials/logo.html" %}
       <span class="brand-text"><span class="brand-name">Mausam</span><span class="brand-sub">your money weather</span></span>
     </a>
-    {% for item in NAV %}
-      {% if loop.index0 in (3, 8, 11) %}<div class="nav-sep" role="separator"></div>{% endif %}
-      <a class="nav-link" href="{{ item.href }}" {% if (item.href == '/' and current_path == '/') or (item.href != '/' and current_path.startswith(item.href)) %}aria-current="page"{% endif %} title="{{ item.label }}">
-        <i data-lucide="{{ item.icon }}" aria-hidden="true"></i><span class="nav-label">{{ item.label }}</span>
-      </a>
+    {% for group, items in NAV_GROUPS %}
+      <div class="nav-group" role="group" aria-label="{{ group }}">
+        <span class="nav-heading">{{ group }}</span>
+        {% for item in items %}
+        <a class="nav-link" href="{{ item.href }}" {% if nav_active(item, current_path) %}aria-current="page"{% endif %} title="{{ item.label }}">
+          <i data-lucide="{{ item.icon }}" aria-hidden="true"></i><span class="nav-label">{{ item.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
     {% endfor %}
     <button class="nav-link btn-ghost collapse-btn" type="button" id="collapse-btn" aria-label="Collapse sidebar" style="border:0;background:none;cursor:pointer;font:inherit">
       <i data-lucide="panel-left-close" aria-hidden="true"></i><span class="nav-label">Collapse</span>
@@ -58,6 +63,9 @@
         <i data-lucide="bell" aria-hidden="true"></i>
         {% if unread_alerts %}<span class="badge-count">{{ unread_alerts if unread_alerts < 100 else '99+' }}</span>{% endif %}
       </a>
+      <a class="icon-btn" href="/settings" aria-label="Settings" title="Settings" {% if current_path.startswith('/settings') %}aria-current="page"{% endif %}>
+        <i data-lucide="settings" aria-hidden="true"></i>
+      </a>
       <button class="icon-btn" type="button" id="theme-btn" aria-label="Switch between day and night" title="Day / night">
         <i data-lucide="moon" aria-hidden="true"></i>
       </button>
@@ -72,8 +80,8 @@
 
 <nav class="tabbar" aria-label="Main (mobile)">
   {% for item in NAV if item.mobile %}
-    <a href="{{ item.href }}" {% if (item.href == '/' and current_path == '/') or (item.href != '/' and current_path.startswith(item.href)) %}aria-current="page"{% endif %}>
-      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label.split(' ')[0] }}
+    <a href="{{ item.href }}" {% if nav_active(item, current_path) %}aria-current="page"{% endif %}>
+      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'Saturday report': 'Report'}.get(item.label, item.label) }}
     </a>
   {% endfor %}
   <button type="button" id="more-btn" aria-haspopup="dialog" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i>More</button>
@@ -82,6 +90,9 @@
   <div class="sheet-backdrop" data-close></div>
   <div class="sheet" role="dialog" aria-label="More pages">
     {% for item in NAV if not item.mobile %}
+      <a href="{{ item.href }}"><i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label }}</a>
+    {% endfor %}
+    {% for item in CORNER_LINKS %}
       <a href="{{ item.href }}"><i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ item.label }}</a>
     {% endfor %}
   </div>
@@ -100,7 +111,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
-<script src="{{ url_for('static', filename='js/mausam.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/mausam.js') }}?v=4"></script>
+{% if not current_path.startswith('/ask') %}{% include "partials/chat_widget.html" %}{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

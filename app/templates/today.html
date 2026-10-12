@@ -44,7 +44,7 @@
     <h2 id="value-h" class="sr-only">Your portfolio value</h2>
     <div class="value-band">
       <div class="stat">
-        <span class="stat-label">Portfolio value</span>
+        <span class="stat-label">Your money today</span>
         <span class="stat-value xl">{{ summary.value|inr }}</span>
         <span class="stat-sub">
           {% if summary.day_change_pct is not none %}
@@ -54,12 +54,12 @@
         </span>
       </div>
       <div class="stat">
-        <span class="stat-label">Total gain since you started</span>
+        <span class="stat-label">You have earned</span>
         <span class="stat-value">{{ summary.gain|money(signed=true) }}</span>
         <span class="stat-sub">{{ summary.gain_pct|pct }} on {{ summary.invested|inr }} invested</span>
       </div>
       <div class="stat">
-        <span class="stat-label">{{ term('xirr', 'XIRR') }} (yearly return)</span>
+        <span class="stat-label">Yearly growth ({{ term('xirr', 'XIRR') }})</span>
         <span class="stat-value">{{ summary.xirr|pct(arrow=false) }}</span>
         <span class="stat-sub muted">accounts for when you invested</span>
       </div>
@@ -97,7 +97,7 @@
 
   {# ---- Five fund tiles ---- #}
   <section aria-labelledby="funds-h">
-    <div class="panel-head"><h2 id="funds-h">Your funds</h2><a href="/portfolio" class="small">Full portfolio</a></div>
+    <div class="panel-head"><h2 id="funds-h">Your five funds this week</h2><a href="/portfolio" class="small">See my money</a></div>
     <div class="fund-row">
       {% for t in tiles %}
       <a class="fund-tile" href="/funds/{{ t.scheme_code }}" style="--fund: {{ t.colour or 'var(--monsoon)' }}">
@@ -120,7 +120,7 @@
 
   {# ---- Market strip ---- #}
   <section class="panel" aria-labelledby="mkt-h">
-    <div class="panel-head"><h2 id="mkt-h" style="font-size:17px">Markets</h2><a href="/market" class="small">Market pulse</a></div>
+    <div class="panel-head"><h2 id="mkt-h" style="font-size:17px">Markets this week</h2><a href="/market" class="small">Markets and news</a></div>
     <div class="market-strip">
       {% for c in strip %}
       <div>

@@ -1,0 +1,101 @@
+{# Ask Mausam: floating chat bubble, bottom-right on every page. Same /api/chat backend and guardrails as before. #}
+<div class="chatw" id="chatw">
+  <section class="chatw-panel" id="chatw-panel" role="dialog" aria-modal="false" aria-labelledby="chatw-title" hidden>
+    <header class="chatw-head">
+      <div>
+        <h2 id="chatw-title">Ask Mausam</h2>
+        <p>Questions about your funds, in plain words</p>
+      </div>
+      <div class="chatw-actions">
+        <button type="button" class="icon-btn" id="chatw-clear" aria-label="Clear chat" title="Clear chat"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+        <button type="button" class="icon-btn" id="chatw-close" aria-label="Close chat" title="Close"><i data-lucide="x" aria-hidden="true"></i></button>
+      </div>
+    </header>
+    <div class="chatw-log" id="chatw-log" aria-live="polite"></div>
+    <div class="chatw-starters" id="chatw-starters">
+      <button type="button" class="chip">Why did my small-cap fund fall?</button>
+      <button type="button" class="chip">Am I on track?</button>
+      <button type="button" class="chip">What is a benchmark?</button>
+      <button type="button" class="chip">What does XIRR mean?</button>
+    </div>
+    <form class="chatw-form" id="chatw-form">
+      <label for="chatw-input" class="sr-only">Your question</label>
+      <textarea id="chatw-input" rows="1" maxlength="600" placeholder="Ask about your money"></textarea>
+      <button type="submit" class="btn btn-primary" id="chatw-send" aria-label="Send"><i data-lucide="send-horizontal" aria-hidden="true"></i></button>
+    </form>
+    <p class="chatw-note">Explains, never tells you what to buy or sell. Answers by Gemini Flash using only your app's numbers, checked by code. Not investment advice.</p>
+  </section>
+  <button type="button" class="chatw-bubble" id="chatw-bubble" aria-expanded="false" aria-controls="chatw-panel" aria-label="Ask Mausam a question">
+    <i data-lucide="message-circle" aria-hidden="true"></i>
+    <span class="chatw-bubble-label">Ask</span>
+  </button>
+</div>
+<script>
+(function () {
+  const M = window.Mausam;
+  const panel = document.getElementById('chatw-panel');
+  const bubble = document.getElementById('chatw-bubble');
+  const log = document.getElementById('chatw-log');
+  const input = document.getElementById('chatw-input');
+  const form = document.getElementById('chatw-form');
+  const send = document.getElementById('chatw-send');
+  const starters = document.getElementById('chatw-starters');
+  let loaded = false, busy = false;
+
+  function add(role, text) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role;
+    el.textContent = text;   // plain text: never interpret HTML from answers
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+  function welcome() {
+    if (!log.childElementCount) add('assistant', "Hi! Ask me anything about your funds or this week's report. I explain; I never tell you what to buy or sell.");
+  }
+  async function load() {
+    if (loaded) return;
+    loaded = true;
+    try {
+      const rows = await M.api('GET', '/api/chat');
+      rows.slice(-20).forEach((m) => add(m.role, m.content));
+    } catch (e) { /* history is optional */ }
+    welcome();
+  }
+  function open(state) {
+    panel.hidden = !state;
+    bubble.setAttribute('aria-expanded', String(state));
+    bubble.classList.toggle('is-open', state);
+    if (state) { load(); setTimeout(() => input.focus(), 50); }
+  }
+  async function ask(q) {
+    q = q.trim();
+    if (!q || busy) return;
+    busy = true; send.disabled = true;
+    starters.hidden = true;
+    add('user', q);
+    input.value = ''; input.style.height = '';
+    const typing = add('assistant typing', 'Thinking…');
+    try {
+      const d = await M.api('POST', '/api/chat', { message: q });
+      typing.remove();
+      add('assistant', d.answer);
+    } catch (e) {
+      typing.remove();
+      add('assistant error', e.message);
+    } finally { busy = false; send.disabled = false; input.focus(); }
+  }
+  bubble.addEventListener('click', () => open(panel.hidden));
+  document.getElementById('chatw-close').addEventListener('click', () => { open(false); bubble.focus(); });
+  document.getElementById('chatw-clear').addEventListener('click', async () => {
+    if (!(await M.confirm('Clear the chat?', 'This deletes your conversation with Ask Mausam.', 'Clear chat'))) return;
+    try { await M.api('DELETE', '/api/chat'); log.innerHTML = ''; starters.hidden = false; welcome(); }
+    catch (e) { M.toast(e.message, 'error'); }
+  });
+  starters.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) ask(b.textContent); });
+  form.addEventListener('submit', (e) => { e.preventDefault(); ask(input.value); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); } });
+  input.addEventListener('input', () => { input.style.height = ''; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { open(false); bubble.focus(); } });
+})();
+</script>

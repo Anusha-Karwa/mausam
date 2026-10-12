@@ -11,21 +11,38 @@ from .services.attribution import label as attribution_label
 from .services.benchmarks import ASSET_LABELS, BENCHMARK_LABELS
 from .services.verdict import weather
 
-NAV = [
-    {"href": "/", "label": "Today", "icon": "sun", "mobile": True},
-    {"href": "/portfolio", "label": "Portfolio", "icon": "pie-chart", "mobile": True},
-    {"href": "/reports", "label": "Weekly reports", "icon": "newspaper", "mobile": True},
-    {"href": "/trends", "label": "Trends", "icon": "activity"},
-    {"href": "/market", "label": "Market pulse", "icon": "globe"},
-    {"href": "/compare", "label": "Compare", "icon": "git-compare"},
-    {"href": "/forecasts", "label": "Forecasts", "icon": "trending-up"},
-    {"href": "/transactions", "label": "Transactions", "icon": "receipt", "mobile": True},
-    {"href": "/manage", "label": "Manage funds", "icon": "list-plus"},
-    {"href": "/calculators", "label": "Calculators", "icon": "calculator"},
-    {"href": "/ask", "label": "Ask Mausam", "icon": "message-circle"},
+# Sidebar menu: plain-word page names in three groups. 'match' = extra URL prefixes that light the item up.
+NAV_GROUPS = [
+    ("This week", [
+        {"href": "/", "label": "Today", "icon": "sun", "mobile": True},
+        {"href": "/reports", "label": "Saturday report", "icon": "newspaper", "mobile": True},
+        {"href": "/market", "label": "Markets and news", "icon": "globe"},
+    ]),
+    ("My money", [
+        {"href": "/portfolio", "label": "My money", "icon": "wallet", "mobile": True},
+        {"href": "/manage", "label": "My funds", "icon": "layers", "mobile": True, "match": ["/funds"]},
+        {"href": "/transactions", "label": "SIPs and payments", "icon": "receipt"},
+    ]),
+    ("Look ahead", [
+        {"href": "/trends", "label": "Past weeks", "icon": "history"},
+        {"href": "/forecasts", "label": "Next month", "icon": "telescope"},
+        {"href": "/compare", "label": "Compare funds", "icon": "git-compare"},
+        {"href": "/calculators", "label": "Plan ahead", "icon": "calculator"},
+    ]),
+]
+NAV = [item for _, items in NAV_GROUPS for item in items]
+# Reachable from the top bar instead of the sidebar
+CORNER_LINKS = [
     {"href": "/alerts", "label": "Alerts", "icon": "bell"},
     {"href": "/settings", "label": "Settings", "icon": "settings"},
 ]
+
+
+def nav_active(item: dict, path: str) -> bool:
+    if item["href"] == "/":
+        return path == "/"
+    return any(path.startswith(p) for p in [item["href"], *item.get("match", [])])
+
 
 
 def indian_group(n: int) -> str:
@@ -142,7 +159,7 @@ def register(app) -> None:
         bench=lambda k: BENCHMARK_LABELS.get(k or "", k or "–"),
         dumps=tojson_attr,
     )
-    app.jinja_env.globals.update(term=term, weather=weather, NAV=NAV, glossary=glossary.GLOSSARY,
+    app.jinja_env.globals.update(term=term, weather=weather, NAV=NAV, NAV_GROUPS=NAV_GROUPS, CORNER_LINKS=CORNER_LINKS, nav_active=nav_active, glossary=glossary.GLOSSARY,
                                  BENCHMARK_LABELS=BENCHMARK_LABELS)
 
     @app.context_processor

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% import "partials/macros.html" as m %}
-{% block title %}Transactions{% endblock %}
+{% block title %}SIPs and payments{% endblock %}
 
 {% block head %}
 <style>
@@ -48,7 +48,7 @@
 
 <div class="page-head">
   <div>
-    <h1>Transactions</h1>
+    <h1>SIPs and payments</h1>
     <p>Log every {{ term('sip', 'SIP') }}, buy and sell so Mausam can work out what you own and how it's doing.</p>
   </div>
   <a class="btn no-print" href="/api/transactions/export.csv" download><i data-lucide="download" aria-hidden="true"></i>Export CSV</a>
