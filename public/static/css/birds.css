@@ -1,53 +1,42 @@
-/* Birds towing a banner of the latest update across the top of the screen. */
+/* One white dove carrying a plain banner across the top. Calm: slow glide, soft wingbeat. */
 
-.flight-lane {
-  position: relative; height: 58px; margin: 0; overflow: hidden; pointer-events: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
-}
+.flight-lane { position: relative; height: 84px; overflow: hidden; pointer-events: none; }
 .flight {
-  position: absolute; top: 9px; left: 0; display: flex; align-items: center; white-space: nowrap;
-  animation: tow-fly 24s linear infinite, tow-bob 3.2s ease-in-out infinite;
+  position: absolute; top: 12px; left: 0; display: flex; align-items: center; white-space: nowrap;
+  animation: dove-fly 34s linear infinite, dove-rise 5s ease-in-out infinite;
   will-change: transform;
 }
-/* Fly from just off the left edge to just off the right edge of the lane. */
-@keyframes tow-fly { from { left: 0; transform: translateX(-100%); } to { left: 100%; transform: translateX(0); } }
-@keyframes tow-bob { 0%, 100% { margin-top: 0; } 50% { margin-top: 6px; } }
+/* from just off the left edge to just off the right edge */
+@keyframes dove-fly { from { left: 0; transform: translateX(-100%); } to { left: 100%; transform: translateX(0); } }
+@keyframes dove-rise { 0%, 100% { margin-top: 0; } 50% { margin-top: 8px; } }
 .flight-lane:hover .flight { animation-play-state: paused; }
 
-.tow-banner {
-  position: relative; display: inline-flex; align-items: center; height: 36px; padding: 0 14px 0 16px;
-  background: #FFF6E0; color: #3B2A10; font: 600 13.5px var(--font-body); text-decoration: none;
-  border-radius: 4px 0 0 4px; box-shadow: 0 6px 16px rgba(20, 30, 50, .18); pointer-events: auto;
-  transform-origin: right center; animation: tow-wave 2.4s ease-in-out infinite;
+.dove-banner {
+  display: inline-flex; align-items: center; height: 36px; padding: 0 16px; pointer-events: auto;
+  background: #FFFFFF; color: #1E2B3A; border: 1px solid #D4DCE3; border-radius: 6px;
+  font: 500 14px var(--font-body); text-decoration: none; box-shadow: 0 6px 18px rgba(15, 23, 36, .12);
 }
-.tow-banner:hover { background: #FFFFFF; }
-.tow-banner:focus-visible { outline: 3px solid var(--monsoon); outline-offset: 2px; }
-.tow-tail { position: absolute; left: -22px; top: 0; width: 22px; height: 36px; fill: #F1E3C0; }
-@keyframes tow-wave { 0%, 100% { transform: skewY(0deg); } 50% { transform: skewY(-1.6deg); } }
+.dove-banner:hover { border-color: var(--monsoon); }
+.dove-string { width: 42px; height: 28px; flex: none; fill: none; stroke: #6B7A8C; stroke-width: 1.3; }
 
-.tow-ropes { width: 60px; height: 36px; flex: none; fill: none; stroke: #5B6676; stroke-width: 1.2; }
-.flock { position: relative; width: 70px; height: 40px; flex: none; }
-.bird { position: absolute; fill: none; stroke: #263445; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.bird .wing { transform-origin: 50% 50%; transform-box: fill-box; animation: flap .55s ease-in-out infinite; }
-.b1 { width: 30px; height: 15px; left: 34px; top: 4px; }
-.b2 { width: 24px; height: 12px; left: 8px; top: 0; }
-.b2 .wing { animation-delay: -.2s; }
-.b3 { width: 22px; height: 11px; left: 14px; top: 24px; }
-.b3 .wing { animation-delay: -.38s; }
-@keyframes flap { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(-.45); } }
+.dove { width: 84px; height: 58px; flex: none; margin-left: -6px; overflow: visible; }
+.dove .body, .dove .tail, .dove .wing-near path { fill: #FFFFFF; stroke: #9AA8B8; stroke-width: 1.1; stroke-linejoin: round; }
+.dove .wing-far path { fill: #DCE4EC; }
+.dove .beak { fill: #E9962E; }
+.dove .eye { fill: #1E2B3A; }
+.dove .wing-near { transform-origin: 50px 32px; animation: wing 1.8s ease-in-out infinite; }
+.dove .wing-far { transform-origin: 46px 30px; animation: wing-far 1.8s ease-in-out infinite; animation-delay: -.15s; }
+@keyframes wing { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-26deg); } }
+@keyframes wing-far { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-16deg); } }
 
-html[data-mode="night"] .bird { stroke: #DCE4F2; }
-html[data-mode="night"] .tow-ropes { stroke: #9AA8BB; }
-html[data-mode="night"] .tow-banner { background: #F3E9C6; color: #2A2108; }
-html[data-mode="night"] .tow-tail { fill: #E2D6AC; }
-/* in a storm the flock fights the wind: a little faster and bumpier */
-body.sky-storm .flight { animation-duration: 18s, 1.6s; }
+html[data-mode="night"] .dove-banner { background: #F3EEDC; color: #1D2433; border-color: #CFC6A8; }
+html[data-mode="night"] .dove-string { stroke: #9AA8BB; }
+html[data-mode="night"] .dove .body, html[data-mode="night"] .dove .tail, html[data-mode="night"] .dove .wing-near path { stroke: #8D9BB0; }
 
 @media (max-width: 860px) {
-  .flight-lane { height: 50px; }
-  .tow-banner { height: 30px; font-size: 12.5px; max-width: 72vw; overflow: hidden; text-overflow: ellipsis; }
-  .tow-text { overflow: hidden; text-overflow: ellipsis; }
-  .tow-tail { height: 30px; }
+  .flight-lane { height: 72px; }
+  .dove-banner { height: 32px; font-size: 13px; max-width: 66vw; overflow: hidden; text-overflow: ellipsis; }
+  .dove { width: 70px; height: 48px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .flight { left: 16px; transform: none; animation: none; }

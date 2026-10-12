@@ -1,27 +1,22 @@
 /* Grouped sidebar + floating "Ask Mausam" chat. Loaded after mausam.css and sky.css. */
 
-/* ---- sidebar: the whole menu fits on screen, no scrolling ---- */
-.sidebar { padding: 14px 10px 12px; gap: 0; overflow-y: hidden; }
-.sidebar .brand { padding: 2px 10px 6px; }
-.sidebar .nav-link { padding: 7px 12px; font-size: 14.5px; }
-.sidebar .collapse-btn { margin-top: auto; }
-@media (max-height: 760px) {
+/* ---- sidebar: the three groups spread evenly down the full height; roomy rows, no scrolling ---- */
+.sidebar { height: 100vh; padding: 20px 12px 14px; gap: 0; overflow: hidden; display: flex; flex-direction: column; }
+.sidebar .brand { padding: 0 10px 4px; flex: none; }
+.nav-groups { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-evenly; padding-block: 6px; }
+.sidebar .nav-link { height: clamp(32px, 5vh, 42px); padding: 0 12px; font-size: 15px; }
+.sidebar .collapse-btn { flex: none; margin-top: 0; border-top: 1px solid var(--line) !important; border-radius: 0; padding-top: 12px; height: auto; }
+@media (max-height: 640px) {
   .sidebar .brand-sub { display: none; }
-  .sidebar .nav-link { padding: 5px 12px; }
-  .nav-group { margin-top: 4px !important; }
-  .nav-heading { padding: 4px 12px 1px !important; font-size: 11.5px !important; }
-}
-@media (max-height: 620px) {
-  .sidebar .nav-link { padding: 3px 12px; font-size: 13.5px; }
-  .sidebar .nav-link svg { width: 17px; height: 17px; }
+  .sidebar .nav-link { font-size: 14px; }
   .sidebar .collapse-btn { display: none; }
 }
 
 /* ---- sidebar groups ---- */
-.nav-group { display: grid; gap: 1px; margin-top: 8px; }
+.nav-group { display: grid; gap: 2px; }
 .nav-heading {
-  font-size: 12px; font-weight: 600; color: var(--slate); padding: 6px 12px 2px;
-  letter-spacing: .02em;
+  font-size: 11.5px; font-weight: 600; color: var(--slate); padding: 0 12px 4px;
+  letter-spacing: .06em; text-transform: uppercase;
 }
 .shell.collapsed .nav-heading { visibility: hidden; height: 6px; padding: 0; }
 .icon-btn[aria-current="page"] { border-color: var(--monsoon); color: var(--monsoon); }
