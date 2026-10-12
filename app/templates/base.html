@@ -81,7 +81,7 @@
 <nav class="tabbar" aria-label="Main (mobile)">
   {% for item in NAV if item.mobile %}
     <a href="{{ item.href }}" {% if nav_active(item, current_path) %}aria-current="page"{% endif %}>
-      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'My portfolio': 'Portfolio', 'My funds': 'Funds', 'SIPs and payments': 'SIPs'}.get(item.label, item.label) }}
+      <i data-lucide="{{ item.icon }}" aria-hidden="true"></i>{{ {'My portfolio': 'Portfolio', 'Manage funds': 'Funds', 'SIPs and payments': 'SIPs'}.get(item.label, item.label) }}
     </a>
   {% endfor %}
   <button type="button" id="more-btn" aria-haspopup="dialog" aria-expanded="false"><i data-lucide="menu" aria-hidden="true"></i>More</button>

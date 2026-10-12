@@ -20,7 +20,7 @@ NAV_GROUPS = [
     ]),
     ("My money", [
         {"href": "/portfolio", "label": "My portfolio", "icon": "wallet", "mobile": True},
-        {"href": "/manage", "label": "My funds", "icon": "layers", "mobile": True, "match": ["/funds"]},
+        {"href": "/manage", "label": "Manage funds", "icon": "layers", "mobile": True, "match": ["/funds"]},
         {"href": "/transactions", "label": "SIPs and payments", "icon": "receipt", "mobile": True},
     ]),
     ("Look ahead", [
@@ -176,18 +176,19 @@ def register(app) -> None:
         if not config.DATABASE_URL:
             return ctx
         try:
-            row = db.one("""SELECT MAX(n.nav_date) AS d FROM nav_history n JOIN funds f ON f.scheme_code = n.scheme_code
-                            WHERE f.is_active AND f.user_id = %s""", [getattr(g, "user_id", 1)])
-            d = row["d"] if row else None
+            # One round trip for everything the top bar needs (data date, sky, unread alerts).
+            uid = getattr(g, "user_id", 1)
+            row = db.one(
+                """SELECT (SELECT MAX(n.nav_date) FROM nav_history n JOIN funds f ON f.scheme_code = n.scheme_code
+                           WHERE f.is_active AND f.user_id = %(u)s) AS d,
+                          (SELECT verdict FROM reports WHERE user_id = %(u)s ORDER BY week_ending DESC LIMIT 1) AS v,
+                          (SELECT COUNT(*) FROM alerts WHERE (user_id = %(u)s OR user_id IS NULL) AND read_at IS NULL) AS c""",
+                {"u": uid}) or {}
+            d = row.get("d")
             ctx["data_as_of"] = d
             ctx["fresh"] = (d is not None) and not is_stale(d, date.today())
-            # The whole screen shows this week's weather (pages like a report detail can pass their own `sky`).
-            latest_verdict = db.scalar("SELECT verdict FROM reports WHERE user_id = %s ORDER BY week_ending DESC LIMIT 1",
-                                       [getattr(g, "user_id", 1)])
-            ctx["sky"] = weather(latest_verdict)
-            ctx["unread_alerts"] = int(db.scalar(
-                "SELECT COUNT(*) FROM alerts WHERE (user_id = %s OR user_id IS NULL) AND read_at IS NULL",
-                [getattr(g, "user_id", 1)]) or 0)
+            ctx["sky"] = weather(row.get("v"))
+            ctx["unread_alerts"] = int(row.get("c") or 0)
         except Exception:  # noqa: BLE001 - layout must render even if the DB is down
             pass
         # Demo preview: ?sky=clear|clouds|storm shows that weather on any page.

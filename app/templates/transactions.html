@@ -55,7 +55,7 @@
 <div class="page-head">
   <div>
     <h1>SIPs and payments</h1>
-    <p>Your monthly {{ term('sip', 'SIP') }} plan, and a record of every payment in or out. To add or remove a fund, go to <a href="/manage">My funds</a>.</p>
+    <p>Your monthly {{ term('sip', 'SIP') }} plan, and a record of every payment in or out. To add or remove a fund, go to <a href="/manage">Manage funds</a>.</p>
   </div>
   <a class="btn no-print" href="/api/transactions/export.csv" download><i data-lucide="download" aria-hidden="true"></i>Export CSV</a>
 </div>
@@ -66,7 +66,7 @@
 </div>
 
 {% if not funds %}
-<div class="panel">{{ m.empty('list-plus', 'Add a fund first', 'Payments belong to a fund. Add your funds on My funds first, then come back here.', '/manage', 'Go to My funds') }}</div>
+<div class="panel">{{ m.empty('list-plus', 'Add a fund first', 'Payments belong to a fund. Add your funds on Manage funds first, then come back here.', '/manage', 'Go to Manage funds') }}</div>
 {% else %}
 <div class="stack">
   {# ---------- Monthly SIP plan (the only place SIP amounts and dates are set) ---------- #}

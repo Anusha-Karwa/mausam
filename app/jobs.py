@@ -126,6 +126,8 @@ def refresh_navs(details: dict) -> dict:
         if not st["ok"]:
             details["fallbacks"].append(f"{key}: Yahoo failed, using proxy fund" if st.get("source") == "proxy"
                                         else f"{key}: Yahoo failed, no proxy")
+    from . import cache
+    cache.clear()  # fresh data: drop cached index cards etc.
     if errors:
         details["_status"] = "partial"
     return {"navs": results, "nav_errors": errors, "indices": idx}

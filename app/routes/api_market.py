@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, request
 
-from .. import db
+from .. import cache, db
 from ..services import indices, news, returns
 from ._util import fail, ok
 
@@ -17,6 +17,11 @@ RANGES = {"1M": 31, "3M": 92, "6M": 183, "1Y": 366, "3Y": 3 * 366, "5Y": 5 * 366
 
 
 def index_cards() -> list[dict]:
+    """Index cards, cached for 10 minutes (index data changes once a day)."""
+    return cache.cached("index_cards", 600, _index_cards)
+
+
+def _index_cards() -> list[dict]:
     out = []
     start = date.today() - timedelta(days=400)
     for key, label in CARDS:
