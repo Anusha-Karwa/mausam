@@ -19,7 +19,7 @@
       function resolve() {
         var o = get('mausam-theme-today');
         if (o && o.split('|')[1] === today()) return o.split('|')[0];
-        var saved = get('mausam-theme');
+        var saved = get('mausam-theme-fixed');
         return (saved === 'light' || saved === 'dark') ? saved : auto();
       }
       function apply() {
@@ -31,10 +31,12 @@
       }
       window.mausamTheme = {
         apply: apply, resolve: resolve, auto: auto,
-        saved: function () { var s = get('mausam-theme'); return (s === 'light' || s === 'dark') ? s : 'auto'; },
+        saved: function () { var s = get('mausam-theme-fixed'); return (s === 'light' || s === 'dark') ? s : 'auto'; },
         setToday: function (t) { set('mausam-theme-today', t + '|' + today()); apply(); },
-        setSaved: function (t) { set('mausam-theme', t === 'auto' ? null : t); set('mausam-theme-today', null); apply(); }
+        setSaved: function (t) { set('mausam-theme-fixed', t === 'auto' ? null : t); set('mausam-theme-today', null); apply(); }
       };
+      // The old toggle stored 'mausam-theme' permanently; drop it so the 6 pm rule works for everyone.
+      set('mausam-theme', null);
       apply();
       setInterval(apply, 60000);   // flips to night at 6 pm (and back at 6 am) while the page is open
       if (get('mausam-sidebar') === 'collapsed') root.classList.add('sidebar-collapsed');
