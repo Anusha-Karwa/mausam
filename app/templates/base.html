@@ -46,7 +46,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mausam.css') }}?v=6">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sky.css') }}?v=2">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-chat.css') }}?v=5">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/birds.css') }}?v=2">
   {% block head %}{% endblock %}
 </head>
 <body class="sky-{{ (sky or {}).key or 'clear' }}">
@@ -96,7 +95,6 @@
         <i data-lucide="moon" aria-hidden="true"></i>
       </button>
     </header>
-    {% include "partials/bird_banner.html" %}
 
     <main id="main" class="content" tabindex="-1">
       {% block content %}{% endblock %}

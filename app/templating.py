@@ -148,25 +148,6 @@ def term(key: str, text: str | None = None) -> Markup:
                   f'aria-label="{escape(label)}: {escape(entry["short"])}">{escape(label)}</button>')
 
 
-def latest_updates(ctx: dict, report_week, news_item) -> list[dict]:
-    """Short messages the birds carry across the top of the screen."""
-    out = []
-    sky = ctx.get("sky") or {}
-    if report_week:
-        out.append({"text": f"Saturday report ready: {sky.get('label', 'see this week')} for the week ending {fmt_date(report_week, 'short')}",
-                    "href": f"/reports/{report_week.isoformat()}"})
-    if ctx.get("data_as_of"):
-        word = "Fresh" if ctx.get("fresh") else "Last"
-        out.append({"text": f"{word} NAVs from {fmt_date(ctx['data_as_of'], 'short')}", "href": "/portfolio"})
-    if ctx.get("unread_alerts"):
-        n = ctx["unread_alerts"]
-        out.append({"text": f"{n} new alert{'s' if n != 1 else ''} for you", "href": "/alerts"})
-    if news_item and news_item.get("t"):
-        title = news_item["t"] if len(news_item["t"]) <= 70 else news_item["t"][:67].rstrip() + "…"
-        out.append({"text": f"In the news: {title}", "href": news_item.get("u") or "/market", "external": True})
-    return out
-
-
 def tojson_attr(value) -> str:
     return json.dumps(value, default=str)
 
@@ -190,7 +171,7 @@ def register(app) -> None:
         from .config import config
         from .services.returns import is_stale
 
-        ctx = {"updates": [], "csrf_token": getattr(g, "csrf_token", ""), "current_path": request.path,
+        ctx = {"csrf_token": getattr(g, "csrf_token", ""), "current_path": request.path,
                "data_as_of": None, "fresh": None, "sky": weather(None), "unread_alerts": 0, "platform_url": config.INVESTING_PLATFORM_URL}
         if not config.DATABASE_URL:
             return ctx
@@ -201,17 +182,13 @@ def register(app) -> None:
                 """SELECT (SELECT MAX(n.nav_date) FROM nav_history n JOIN funds f ON f.scheme_code = n.scheme_code
                            WHERE f.is_active AND f.user_id = %(u)s) AS d,
                           (SELECT verdict FROM reports WHERE user_id = %(u)s ORDER BY week_ending DESC LIMIT 1) AS v,
-                          (SELECT COUNT(*) FROM alerts WHERE (user_id = %(u)s OR user_id IS NULL) AND read_at IS NULL) AS c,
-                          (SELECT week_ending FROM reports WHERE user_id = %(u)s ORDER BY week_ending DESC LIMIT 1) AS w,
-                          (SELECT json_build_object('t', title, 'u', url) FROM news_items
-                             ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 1) AS n""",
+                          (SELECT COUNT(*) FROM alerts WHERE (user_id = %(u)s OR user_id IS NULL) AND read_at IS NULL) AS c""",
                 {"u": uid}) or {}
             d = row.get("d")
             ctx["data_as_of"] = d
             ctx["fresh"] = (d is not None) and not is_stale(d, date.today())
             ctx["sky"] = weather(row.get("v"))
             ctx["unread_alerts"] = int(row.get("c") or 0)
-            ctx["updates"] = latest_updates(ctx, row.get("w"), row.get("n"))
         except Exception:  # noqa: BLE001 - layout must render even if the DB is down
             pass
         # Demo preview: ?sky=clear|clouds|storm shows that weather on any page.
