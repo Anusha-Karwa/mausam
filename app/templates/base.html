@@ -8,13 +8,36 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
   <script>
+    // Day/night: automatic by the clock (night from 6 pm to 6 am). The top-bar button overrides it for
+    // the rest of today only; Settings can fix it to Light or Dark permanently.
     (function () {
-      var root = document.documentElement, t = null;
-      try { t = localStorage.getItem('mausam-theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
-      // Day or night for the sky: an explicit choice wins, otherwise follow the device.
-      var night = t ? t === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      root.setAttribute('data-mode', night ? 'night' : 'day');
-      try { if (localStorage.getItem('mausam-sidebar') === 'collapsed') document.documentElement.classList.add('sidebar-collapsed'); } catch (e) {}
+      var root = document.documentElement;
+      function today() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+      function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+      function set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+      function auto() { var h = new Date().getHours(); return (h >= 18 || h < 6) ? 'dark' : 'light'; }
+      function resolve() {
+        var o = get('mausam-theme-today');
+        if (o && o.split('|')[1] === today()) return o.split('|')[0];
+        var saved = get('mausam-theme');
+        return (saved === 'light' || saved === 'dark') ? saved : auto();
+      }
+      function apply() {
+        var t = resolve();
+        var changed = root.getAttribute('data-theme') !== t;
+        root.setAttribute('data-theme', t);
+        root.setAttribute('data-mode', t === 'dark' ? 'night' : 'day');
+        if (changed && document.readyState !== 'loading') document.dispatchEvent(new CustomEvent('mausam:theme'));
+      }
+      window.mausamTheme = {
+        apply: apply, resolve: resolve, auto: auto,
+        saved: function () { var s = get('mausam-theme'); return (s === 'light' || s === 'dark') ? s : 'auto'; },
+        setToday: function (t) { set('mausam-theme-today', t + '|' + today()); apply(); },
+        setSaved: function (t) { set('mausam-theme', t === 'auto' ? null : t); set('mausam-theme-today', null); apply(); }
+      };
+      apply();
+      setInterval(apply, 60000);   // flips to night at 6 pm (and back at 6 am) while the page is open
+      if (get('mausam-sidebar') === 'collapsed') root.classList.add('sidebar-collapsed');
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -115,7 +138,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.453.0/dist/umd/lucide.min.js"></script>
-<script src="{{ url_for('static', filename='js/mausam.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='js/mausam.js') }}?v=5"></script>
 {% if not current_path.startswith('/ask') %}{% include "partials/chat_widget.html" %}{% endif %}
 {% block scripts %}{% endblock %}
 </body>

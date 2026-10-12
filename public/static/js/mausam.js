@@ -226,8 +226,7 @@
       const dark = root.getAttribute('data-theme') === 'dark' ||
         (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       const next = dark ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      try { localStorage.setItem('mausam-theme', next); } catch (e) {}
+      if (window.mausamTheme) window.mausamTheme.setToday(next); else root.setAttribute('data-theme', next);
       updateMode();
       setIcon();
       chartDefaults();
@@ -255,6 +254,7 @@
 
   function updateMode() {
     const root = document.documentElement;
+    if (window.mausamTheme) { window.mausamTheme.apply(); }
     const theme = root.getAttribute('data-theme');
     const night = theme ? theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     root.setAttribute('data-mode', night ? 'night' : 'day');

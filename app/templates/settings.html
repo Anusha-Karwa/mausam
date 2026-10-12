@@ -238,7 +238,7 @@
       <div class="segmented" role="group" aria-label="Colour theme" id="theme-choice">
         <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
         <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-        <button type="button" data-theme-choice="system" aria-pressed="false">Match my device</button>
+        <button type="button" data-theme-choice="system" aria-pressed="false">Automatic (night after 6 pm)</button>
       </div>
     </section>
 
@@ -456,7 +456,8 @@
   // ---------- theme ----------
   const root = document.documentElement;
   function currentTheme() {
-    try { return localStorage.getItem('mausam-theme') || 'system'; } catch (e) { return root.getAttribute('data-theme') || 'system'; }
+    const s = window.mausamTheme ? window.mausamTheme.saved() : 'auto';
+    return s === 'auto' ? 'system' : s;
   }
   function syncThemeButtons() {
     const t = currentTheme();
@@ -464,13 +465,7 @@
   }
   M.$$('[data-theme-choice]').forEach((b) => b.addEventListener('click', () => {
     const t = b.dataset.themeChoice;
-    if (t === 'system') {
-      root.removeAttribute('data-theme');
-      try { localStorage.removeItem('mausam-theme'); } catch (e) { /* private mode */ }
-    } else {
-      root.setAttribute('data-theme', t);
-      try { localStorage.setItem('mausam-theme', t); } catch (e) { /* private mode */ }
-    }
+    if (window.mausamTheme) window.mausamTheme.setSaved(t === 'system' ? 'auto' : t);
     // Keep the top-bar sun/moon button in step.
     const dark = root.getAttribute('data-theme') === 'dark' ||
       (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
